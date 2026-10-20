@@ -1,0 +1,19 @@
+ALTER TABLE platform_egress_ips DROP COLUMN last_fail_at_ns;
+ALTER TABLE platform_egress_ips DROP COLUMN blacklisted_at_ns;
+ALTER TABLE platform_egress_ips DROP COLUMN last_node_hash;
+
+ALTER TABLE platforms DROP COLUMN probe_enabled;
+ALTER TABLE platforms DROP COLUMN probe_url;
+ALTER TABLE platforms DROP COLUMN probe_method;
+ALTER TABLE platforms DROP COLUMN probe_headers;
+ALTER TABLE platforms DROP COLUMN probe_body;
+ALTER TABLE platforms DROP COLUMN probe_pass_status_json;
+ALTER TABLE platforms DROP COLUMN probe_follow_redirects;
+ALTER TABLE platforms DROP COLUMN probe_interval_ns;
+ALTER TABLE platforms DROP COLUMN probe_scope;
+ALTER TABLE platforms DROP COLUMN verdict_enabled;
+ALTER TABLE platforms DROP COLUMN blacklist_threshold;
+ALTER TABLE platforms DROP COLUMN rehab_interval_ns;
+ALTER TABLE platforms DROP COLUMN rehab_success_threshold;
+ALTER TABLE platforms DROP COLUMN blacklist_empty_policy;
+ALTER TABLE platforms DROP COLUMN blacklist_grace_k;

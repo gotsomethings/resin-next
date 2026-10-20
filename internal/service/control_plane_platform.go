@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"net/netip"
 	"errors"
 	"fmt"
 	"strings"
@@ -47,6 +48,23 @@ type PlatformResponse struct {
 	ASNFilters           []string `json:"asn_filters"`
 	IPTypeFilters        []string `json:"ip_type_filters"`
 	EgressIPFilters      []string `json:"egress_ip_filters"`
+
+	// Probe / verdict surface (P2).
+	ProbeEnabled          bool   `json:"probe_enabled"`
+	ProbeURL              string `json:"probe_url"`
+	ProbeMethod           string `json:"probe_method"`
+	ProbeHeaders          string `json:"probe_headers"`
+	ProbeBody             string `json:"probe_body"`
+	ProbePassStatus       []int  `json:"probe_pass_status"`
+	ProbeFollowRedirects  bool   `json:"probe_follow_redirects"`
+	ProbeInterval         string `json:"probe_interval"`
+	ProbeScope            string `json:"probe_scope"`
+	VerdictEnabled        bool   `json:"verdict_enabled"`
+	BlacklistThreshold    int    `json:"blacklist_threshold"`
+	RehabInterval         string `json:"rehab_interval"`
+	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
+	BlacklistEmptyPolicy  string `json:"blacklist_empty_policy"`
+	BlacklistGraceK       int    `json:"blacklist_grace_k"`
 }
 
 func platformToResponse(p model.Platform) PlatformResponse {
@@ -78,6 +96,22 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		ASNFilters:           append([]string(nil), p.ASNFilters...),
 		IPTypeFilters:        append([]string(nil), p.IPTypeFilters...),
 		EgressIPFilters:      append([]string(nil), p.EgressIPFilters...),
+
+		ProbeEnabled:          p.ProbeEnabled,
+		ProbeURL:              p.ProbeURL,
+		ProbeMethod:           p.ProbeMethod,
+		ProbeHeaders:          p.ProbeHeaders,
+		ProbeBody:             p.ProbeBody,
+		ProbePassStatus:       append([]int(nil), p.ProbePassStatus...),
+		ProbeFollowRedirects:  p.ProbeFollowRedirects,
+		ProbeInterval:         time.Duration(p.ProbeIntervalNs).String(),
+		ProbeScope:            p.ProbeScope,
+		VerdictEnabled:        p.VerdictEnabled,
+		BlacklistThreshold:    p.BlacklistThreshold,
+		RehabInterval:         time.Duration(p.RehabIntervalNs).String(),
+		RehabSuccessThreshold: p.RehabSuccessThreshold,
+		BlacklistEmptyPolicy:  p.BlacklistEmptyPolicy,
+		BlacklistGraceK:       p.BlacklistGraceK,
 	}
 }
 
@@ -106,6 +140,10 @@ type platformConfig struct {
 
 	// Policy surface (P1).
 	Policy platform.Policy
+
+	// Probe / verdict surface (P2).
+	Probe   platform.ProbeConfig
+	Verdict platform.VerdictConfig
 }
 
 func normalizePlatformMissAction(raw string) string {
@@ -137,6 +175,8 @@ func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig 
 			s.EnvCfg.DefaultPlatformReverseProxyFixedAccountHeader,
 		),
 		AllocationPolicy: s.EnvCfg.DefaultPlatformAllocationPolicy,
+		Probe:            platform.ProbeFromModel(model.Platform{}),
+		Verdict:          platform.VerdictFromModel(model.Platform{}),
 	}
 }
 
@@ -152,6 +192,8 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 		AllocationPolicy:                 mp.AllocationPolicy,
 		PassiveCircuitBreakerDisabled:    mp.PassiveCircuitBreakerDisabled,
 		Policy:                           platform.PolicyFromModel(mp),
+		Probe:                            platform.ProbeFromModel(mp),
+		Verdict:                          platform.VerdictFromModel(mp),
 	}
 }
 
@@ -170,10 +212,11 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 		UpdatedAtNs:                      updatedAtNs,
 	}
 	platform.ApplyPolicyToModel(cfg.Policy, &mp)
+	platform.ApplyProbeToModel(cfg.Probe, cfg.Verdict, &mp)
 	return mp
 }
 
-func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc) (*platform.Platform, error) {
+func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc, blacklist func(netip.Addr) bool) (*platform.Platform, error) {
 	compiledRegexFilters, err := platform.CompileRegexFilters(cfg.RegexFilters)
 	if err != nil {
 		return nil, err
@@ -192,6 +235,9 @@ func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc)
 		cfg.PassiveCircuitBreakerDisabled,
 	)
 	plat.ASNLookup = asnLookup
+	plat.BlacklistLookup = blacklist
+	plat.Probe = cfg.Probe
+	plat.Verdict = cfg.Verdict
 	return plat, nil
 }
 
@@ -303,6 +349,12 @@ func validatePlatformConfig(cfg *platformConfig, validateRegionFilters bool) *Se
 	if err := platform.Validate(cfg.Policy); err != nil {
 		return invalidArg(err.Error())
 	}
+	if err := validateProbeConfig(cfg.Probe); err != nil {
+		return err
+	}
+	if err := validateVerdictConfig(cfg.Verdict); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -311,7 +363,7 @@ func (s *ControlPlaneService) compileAndUpsertPlatform(id string, cfg platformCo
 		return model.Platform{}, nil, invalidArg("name: " + err.Error())
 	}
 
-	plat, err := cfg.toRuntime(id, s.asnLookupFunc())
+	plat, err := cfg.toRuntime(id, s.asnLookupFunc(), s.blacklistLookup(id))
 	if err != nil {
 		return model.Platform{}, nil, invalidArg(err.Error())
 	}
@@ -386,6 +438,22 @@ type CreatePlatformRequest struct {
 	ASNFilters           []string `json:"asn_filters"`
 	IPTypeFilters        []string `json:"ip_type_filters"`
 	EgressIPFilters      []string `json:"egress_ip_filters"`
+
+	ProbeEnabled          *bool   `json:"probe_enabled"`
+	ProbeURL              *string `json:"probe_url"`
+	ProbeMethod           *string `json:"probe_method"`
+	ProbeHeaders          *string `json:"probe_headers"`
+	ProbeBody             *string `json:"probe_body"`
+	ProbePassStatus       []int   `json:"probe_pass_status"`
+	ProbeFollowRedirects  *bool   `json:"probe_follow_redirects"`
+	ProbeInterval         *string `json:"probe_interval"`
+	ProbeScope            *string `json:"probe_scope"`
+	VerdictEnabled        *bool   `json:"verdict_enabled"`
+	BlacklistThreshold    *int    `json:"blacklist_threshold"`
+	RehabInterval         *string `json:"rehab_interval"`
+	RehabSuccessThreshold *int    `json:"rehab_success_threshold"`
+	BlacklistEmptyPolicy  *string `json:"blacklist_empty_policy"`
+	BlacklistGraceK       *int    `json:"blacklist_grace_k"`
 }
 
 // CreatePlatform creates a new platform.
@@ -444,6 +512,9 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 		cfg.PassiveCircuitBreakerDisabled = *req.PassiveCircuitBreakerDisabled
 	}
 	if svcErr := applyPolicyPatch(&cfg.Policy, policyPatchFromCreate(req)); svcErr != nil {
+		return nil, svcErr
+	}
+	if svcErr := applyProbePatch(&cfg.Probe, &cfg.Verdict, probePatchFromCreate(req)); svcErr != nil {
 		return nil, svcErr
 	}
 	if err := validatePlatformConfig(&cfg, true); err != nil {
@@ -568,6 +639,13 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 		return nil, svcErr
 	}
 	if svcErr := applyPolicyPatch(&cfg.Policy, policyPatch); svcErr != nil {
+		return nil, svcErr
+	}
+	probePatch, svcErr := probePatchFromMerge(patch)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	if svcErr := applyProbePatch(&cfg.Probe, &cfg.Verdict, probePatch); svcErr != nil {
 		return nil, svcErr
 	}
 	if err := validatePlatformConfig(&cfg, regionFiltersPatched); err != nil {
@@ -899,9 +977,15 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 		})
 	}
 
-	rows, err := s.Engine.ListPlatformEgressIPs(platformID)
-	if err != nil {
-		return nil, internal("list platform egress ips", err)
+	var rows []model.PlatformEgressIP
+	if s.Verdicts != nil {
+		rows = s.Verdicts.Snapshot(platformID)
+	} else {
+		var err error
+		rows, err = s.Engine.ListPlatformEgressIPs(platformID)
+		if err != nil {
+			return nil, internal("list platform egress ips", err)
+		}
 	}
 	out := make([]PlatformEgressIPResponse, 0, len(rows))
 	for _, r := range rows {
@@ -919,6 +1003,34 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 		})
 	}
 	return out, nil
+}
+
+// blacklistLookup builds the per-platform blacklist predicate.
+func (s *ControlPlaneService) blacklistLookup(platformID string) func(netip.Addr) bool {
+	if s == nil || s.Verdicts == nil {
+		return nil
+	}
+	return func(ip netip.Addr) bool {
+		return s.Verdicts.IsBlacklisted(platformID, ip)
+	}
+}
+
+// EvictLeasesForIP drops every lease pinned to the given egress IP.
+func (s *ControlPlaneService) EvictLeasesForIP(platformID, ip string) int {
+	leases, err := s.ListLeases(platformID)
+	if err != nil {
+		return 0
+	}
+	evicted := 0
+	for _, l := range leases {
+		if l.EgressIP != ip {
+			continue
+		}
+		if s.Router.DeleteLease(platformID, l.Account) {
+			evicted++
+		}
+	}
+	return evicted
 }
 
 // geoLookup adapts the optional GeoIP service.

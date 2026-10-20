@@ -30,6 +30,23 @@ type Platform struct {
 	ASNFilters           []string
 	IPTypeFilters        []string
 	EgressIPFilters      []string
+
+	// --- Platform probe + verdict (P2) ---
+	ProbeEnabled          bool   `json:"probe_enabled"`
+	ProbeURL              string `json:"probe_url"`
+	ProbeMethod           string `json:"probe_method"`
+	ProbeHeaders          string `json:"probe_headers"`
+	ProbeBody             string `json:"probe_body"`
+	ProbePassStatus       []int  `json:"probe_pass_status"`
+	ProbeFollowRedirects  bool   `json:"probe_follow_redirects"`
+	ProbeIntervalNs       int64  `json:"probe_interval_ns"`
+	ProbeScope            string `json:"probe_scope"`
+	VerdictEnabled        bool   `json:"verdict_enabled"`
+	BlacklistThreshold    int    `json:"blacklist_threshold"`
+	RehabIntervalNs       int64  `json:"rehab_interval_ns"`
+	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
+	BlacklistEmptyPolicy  string `json:"blacklist_empty_policy"`
+	BlacklistGraceK       int    `json:"blacklist_grace_k"`
 }
 
 // PlatformEgressIP is one row of the per-platform egress-IP ledger.
@@ -45,6 +62,9 @@ type PlatformEgressIP struct {
 	LastSuccessAtNs int64  `json:"last_success_at_ns"`
 	FirstSeenNs     int64  `json:"first_seen_ns"`
 	LastSeenNs      int64  `json:"last_seen_ns"`
+	LastFailAtNs    int64  `json:"last_fail_at_ns"`
+	BlacklistedAtNs int64  `json:"blacklisted_at_ns"`
+	LastNodeHash    string `json:"last_node_hash"`
 }
 
 // Subscription represents a node subscription source.

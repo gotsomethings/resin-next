@@ -145,3 +145,24 @@ func (p mergePatch) optionalFloat(field string) (float64, bool, *ServiceError) {
 	}
 	return value, true, nil
 }
+
+
+func (p mergePatch) optionalIntSlice(field string) ([]int, bool, *ServiceError) {
+	raw, ok := p[field]
+	if !ok {
+		return nil, false, nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil, true, invalidArg(fmt.Sprintf("%s: must be an array", field))
+	}
+	value := make([]int, len(arr))
+	for i, item := range arr {
+		num, ok := item.(float64)
+		if !ok || math.Trunc(num) != num {
+			return nil, true, invalidArg(fmt.Sprintf("%s[%d]: must be an integer", field, i))
+		}
+		value[i] = int(num)
+	}
+	return value, true, nil
+}

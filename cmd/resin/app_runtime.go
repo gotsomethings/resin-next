@@ -20,6 +20,8 @@ import (
 	"github.com/Resinat/Resin/internal/metrics"
 	"github.com/Resinat/Resin/internal/netutil"
 	"github.com/Resinat/Resin/internal/node"
+	"github.com/Resinat/Resin/internal/platform"
+	"github.com/Resinat/Resin/internal/probe"
 	"github.com/Resinat/Resin/internal/proxy"
 	"github.com/Resinat/Resin/internal/requestlog"
 	"github.com/Resinat/Resin/internal/routing"
@@ -41,6 +43,8 @@ type resinApp struct {
 	requestlogSvc   *requestlog.Service
 	endpointManager *endpointRuntimeManager
 	transportPool   *proxy.OutboundTransportPool
+	platformProbe   *probe.PlatformProbe
+	verdicts        *service.VerdictStore
 }
 
 func run() error {
@@ -371,7 +375,20 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		StartedAt: startedAt,
 	}
 
+	verdictStore := service.NewVerdictStore(engine.StateRepo)
+	if persisted, err := engine.ListPlatforms(); err == nil {
+		ids := make([]string, 0, len(persisted))
+		for _, pl := range persisted {
+			ids = append(ids, pl.ID)
+		}
+		if err := verdictStore.Load(ids); err != nil {
+			log.Printf("verdict store load: %v", err)
+		}
+	}
+	a.verdicts = verdictStore
+
 	cpService := &service.ControlPlaneService{
+		Verdicts:       verdictStore,
 		RuntimeCfg:     a.runtimeCfg,
 		EnvCfg:         a.envCfg,
 		Engine:         engine,
@@ -383,6 +400,40 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		GeoIP:          a.geoSvc,
 		MatcherRuntime: a.accountMatcher,
 	}
+
+	verdictStore.SetCallbacks(
+		func(platformID, ip string) {
+			if n := cpService.EvictLeasesForIP(platformID, ip); n > 0 {
+				log.Printf("verdict: %s blacklisted %s, evicted %d lease(s)", platformID, ip, n)
+			}
+		},
+		func(platformID, ip string) {
+			log.Printf("verdict: %s rehabilitated %s", platformID, ip)
+		},
+	)
+
+	platformProbe := probe.NewPlatformProbe(probe.PlatformProbeConfig{
+		Pool:   a.topoRuntime.pool,
+		Verdict: verdictStore,
+		Timeout: func() time.Duration { return a.envCfg.ProbeTimeout },
+		OnVerdictChange: func(platformID string) {
+			if plat, ok := a.topoRuntime.pool.GetPlatform(platformID); ok {
+				a.topoRuntime.pool.RebuildPlatform(plat)
+			}
+		},
+		Targets: func() []probe.PlatformTarget {
+			var out []probe.PlatformTarget
+			a.topoRuntime.pool.RangePlatforms(func(pl *platform.Platform) bool {
+				out = append(out, probe.PlatformTarget{ID: pl.ID, Probe: pl.Probe, Verdict: pl.Verdict})
+				return true
+			})
+			return out
+		},
+	})
+	cpService.PlatformProbe = platformProbe
+	platformProbe.Start()
+	a.platformProbe = platformProbe
+	log.Println("Platform probe started")
 
 	apiSrv := api.NewServerWithAddress(
 		a.envCfg.ListenAddress,
@@ -566,6 +617,11 @@ func (a *resinApp) shutdown(ctx context.Context) {
 
 	a.topoRuntime.scheduler.Stop()
 	log.Println("Subscription scheduler stopped")
+
+	if a.platformProbe != nil {
+		a.platformProbe.Stop()
+		log.Println("Platform probe stopped")
+	}
 
 	a.topoRuntime.probeMgr.Stop()
 	log.Println("Probe manager stopped")

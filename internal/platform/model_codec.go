@@ -205,3 +205,76 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		mp.PassiveCircuitBreakerDisabled,
 	), nil
 }
+
+
+// ProbeFromModel extracts the probe configuration with defaults applied.
+func ProbeFromModel(mp model.Platform) ProbeConfig {
+	p := ProbeConfig{
+		Enabled:         mp.ProbeEnabled,
+		URL:             mp.ProbeURL,
+		Method:          strings.ToUpper(strings.TrimSpace(mp.ProbeMethod)),
+		Headers:         mp.ProbeHeaders,
+		Body:            mp.ProbeBody,
+		PassStatus:      append([]int(nil), mp.ProbePassStatus...),
+		FollowRedirects: mp.ProbeFollowRedirects,
+		Interval:        time.Duration(mp.ProbeIntervalNs),
+		Scope:           mp.ProbeScope,
+	}
+	if p.Method == "" {
+		p.Method = "POST"
+	}
+	if len(p.PassStatus) == 0 {
+		p.PassStatus = []int{200}
+	}
+	if p.Interval <= 0 {
+		p.Interval = 30 * time.Minute
+	}
+	if strings.TrimSpace(p.Scope) == "" {
+		p.Scope = "untested,failed,blacklisted"
+	}
+	return p
+}
+
+// VerdictFromModel extracts the verdict configuration with defaults applied.
+func VerdictFromModel(mp model.Platform) VerdictConfig {
+	v := VerdictConfig{
+		Enabled:               mp.VerdictEnabled,
+		Threshold:             mp.BlacklistThreshold,
+		RehabInterval:         time.Duration(mp.RehabIntervalNs),
+		RehabSuccessThreshold: mp.RehabSuccessThreshold,
+		EmptyPolicy:           mp.BlacklistEmptyPolicy,
+		GraceK:                mp.BlacklistGraceK,
+	}
+	if v.Threshold <= 0 {
+		v.Threshold = 3
+	}
+	if v.RehabInterval <= 0 {
+		v.RehabInterval = 6 * time.Hour
+	}
+	if v.RehabSuccessThreshold <= 0 {
+		v.RehabSuccessThreshold = 3
+	}
+	if v.EmptyPolicy == "" {
+		v.EmptyPolicy = "strict"
+	}
+	return v
+}
+
+// ApplyProbeToModel writes probe/verdict config back onto a model platform.
+func ApplyProbeToModel(probe ProbeConfig, verdict VerdictConfig, mp *model.Platform) {
+	mp.ProbeEnabled = probe.Enabled
+	mp.ProbeURL = probe.URL
+	mp.ProbeMethod = probe.Method
+	mp.ProbeHeaders = probe.Headers
+	mp.ProbeBody = probe.Body
+	mp.ProbePassStatus = append([]int(nil), probe.PassStatus...)
+	mp.ProbeFollowRedirects = probe.FollowRedirects
+	mp.ProbeIntervalNs = int64(probe.Interval)
+	mp.ProbeScope = probe.Scope
+	mp.VerdictEnabled = verdict.Enabled
+	mp.BlacklistThreshold = verdict.Threshold
+	mp.RehabIntervalNs = int64(verdict.RehabInterval)
+	mp.RehabSuccessThreshold = verdict.RehabSuccessThreshold
+	mp.BlacklistEmptyPolicy = verdict.EmptyPolicy
+	mp.BlacklistGraceK = verdict.GraceK
+}

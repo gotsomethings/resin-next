@@ -58,6 +58,8 @@ type ControlPlaneService struct {
 	GeoIP           *geoip.Service
 	ASN             *geoip.ASNService
 	ProbeMgr        *probe.ProbeManager
+	PlatformProbe   *probe.PlatformProbe
+	Verdicts        *VerdictStore
 	MatcherRuntime  *proxy.AccountMatcherRuntime
 	RuntimeCfg      *atomic.Pointer[config.RuntimeConfig]
 	EnvCfg          *config.EnvConfig
@@ -116,6 +118,23 @@ var platformPatchAllowedFields = map[string]bool{
 	"asn_filters":             true,
 	"ip_type_filters":         true,
 	"egress_ip_filters":       true,
+
+	// Probe / verdict surface (P2).
+	"probe_enabled":           true,
+	"probe_url":               true,
+	"probe_method":            true,
+	"probe_headers":           true,
+	"probe_body":              true,
+	"probe_pass_status":       true,
+	"probe_follow_redirects":  true,
+	"probe_interval":          true,
+	"probe_scope":             true,
+	"verdict_enabled":         true,
+	"blacklist_threshold":     true,
+	"rehab_interval":          true,
+	"rehab_success_threshold": true,
+	"blacklist_empty_policy":  true,
+	"blacklist_grace_k":       true,
 }
 
 var subscriptionPatchAllowedFields = map[string]bool{

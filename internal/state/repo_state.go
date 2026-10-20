@@ -50,6 +50,35 @@ func decodeStringSliceJSON(raw string) ([]string, error) {
 	return out, nil
 }
 
+func encodeIntSliceJSON(values []int) (string, error) {
+	if values == nil {
+		values = []int{}
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func decodeIntSliceJSON(raw string) ([]int, error) {
+	var out []int
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []int{}
+	}
+	return out, nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 // --- system_config ---
 
 // GetSystemConfig loads the runtime config and version from state.db.
@@ -102,13 +131,19 @@ const platformColumns = `id, name, sticky_ttl_ns, regex_filters_json, region_fil
 	latency_top_n, latency_max_ms, latency_p95_max_ms, min_alive_streak,
 	min_probe_success_rate, max_last_probe_age_ns, min_node_age_ns,
 	egress_ip_version, egress_country_filters_json, asn_filters_json,
-	ip_type_filters_json, egress_ip_filters_json`
+	ip_type_filters_json, egress_ip_filters_json,
+	probe_enabled, probe_url, probe_method, probe_headers, probe_body,
+	probe_pass_status_json, probe_follow_redirects, probe_interval_ns, probe_scope,
+	verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold,
+	blacklist_empty_policy, blacklist_grace_k`
 
 // scanPlatform scans one row of platformColumns.
 func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform, error) {
 	var p model.Platform
 	var regexFiltersJSON, regionFiltersJSON string
 	var countryFiltersJSON, asnFiltersJSON, ipTypeFiltersJSON, ipFiltersJSON string
+	var passStatusJSON string
+	var probeEnabled, probeFollowRedirects, verdictEnabled int
 	var passiveCircuitBreakerDisabled int
 	if err := scanner.Scan(
 		&p.ID, &p.Name, &p.StickyTTLNs, &regexFiltersJSON, &regionFiltersJSON,
@@ -118,11 +153,21 @@ func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform
 		&p.MinProbeSuccessRate, &p.MaxLastProbeAgeNs, &p.MinNodeAgeNs,
 		&p.EgressIPVersion, &countryFiltersJSON, &asnFiltersJSON,
 		&ipTypeFiltersJSON, &ipFiltersJSON,
+		&probeEnabled, &p.ProbeURL, &p.ProbeMethod, &p.ProbeHeaders, &p.ProbeBody,
+		&passStatusJSON, &probeFollowRedirects, &p.ProbeIntervalNs, &p.ProbeScope,
+		&verdictEnabled, &p.BlacklistThreshold, &p.RehabIntervalNs, &p.RehabSuccessThreshold,
+		&p.BlacklistEmptyPolicy, &p.BlacklistGraceK,
 	); err != nil {
 		return nil, err
 	}
 	p.PassiveCircuitBreakerDisabled = passiveCircuitBreakerDisabled != 0
+	p.ProbeEnabled = probeEnabled != 0
+	p.ProbeFollowRedirects = probeFollowRedirects != 0
+	p.VerdictEnabled = verdictEnabled != 0
 	var err error
+	if p.ProbePassStatus, err = decodeIntSliceJSON(passStatusJSON); err != nil {
+		return nil, fmt.Errorf("decode platform %s probe_pass_status_json: %w", p.ID, err)
+	}
 	if p.RegexFilters, err = decodeStringSliceJSON(regexFiltersJSON); err != nil {
 		return nil, fmt.Errorf("decode platform %s regex_filters_json: %w", p.ID, err)
 	}
@@ -213,6 +258,10 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 	if err != nil {
 		return fmt.Errorf("encode platform %s egress_ip_filters: %w", p.ID, err)
 	}
+	passStatusJSON, err := encodeIntSliceJSON(p.ProbePassStatus)
+	if err != nil {
+		return fmt.Errorf("encode platform %s probe_pass_status: %w", p.ID, err)
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -225,8 +274,12 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		                       latency_top_n, latency_max_ms, latency_p95_max_ms, min_alive_streak,
 		                       min_probe_success_rate, max_last_probe_age_ns, min_node_age_ns,
 		                       egress_ip_version, egress_country_filters_json, asn_filters_json,
-		                       ip_type_filters_json, egress_ip_filters_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                       ip_type_filters_json, egress_ip_filters_json,
+		                       probe_enabled, probe_url, probe_method, probe_headers, probe_body,
+		                       probe_pass_status_json, probe_follow_redirects, probe_interval_ns, probe_scope,
+		                       verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold,
+		                       blacklist_empty_policy, blacklist_grace_k)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name                     = excluded.name,
 			sticky_ttl_ns            = excluded.sticky_ttl_ns,
@@ -249,14 +302,33 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 			egress_country_filters_json = excluded.egress_country_filters_json,
 			asn_filters_json         = excluded.asn_filters_json,
 			ip_type_filters_json     = excluded.ip_type_filters_json,
-			egress_ip_filters_json   = excluded.egress_ip_filters_json
+			egress_ip_filters_json   = excluded.egress_ip_filters_json,
+			probe_enabled            = excluded.probe_enabled,
+			probe_url                = excluded.probe_url,
+			probe_method             = excluded.probe_method,
+			probe_headers            = excluded.probe_headers,
+			probe_body               = excluded.probe_body,
+			probe_pass_status_json   = excluded.probe_pass_status_json,
+			probe_follow_redirects   = excluded.probe_follow_redirects,
+			probe_interval_ns        = excluded.probe_interval_ns,
+			probe_scope              = excluded.probe_scope,
+			verdict_enabled          = excluded.verdict_enabled,
+			blacklist_threshold      = excluded.blacklist_threshold,
+			rehab_interval_ns        = excluded.rehab_interval_ns,
+			rehab_success_threshold  = excluded.rehab_success_threshold,
+			blacklist_empty_policy   = excluded.blacklist_empty_policy,
+			blacklist_grace_k        = excluded.blacklist_grace_k
 	`, p.ID, p.Name, p.StickyTTLNs, regexFiltersJSON, regionFiltersJSON,
 		p.ReverseProxyMissAction, p.ReverseProxyEmptyAccountBehavior, p.ReverseProxyFixedAccountHeader,
 		p.AllocationPolicy, p.PassiveCircuitBreakerDisabled, p.UpdatedAtNs,
 		p.LatencyTopN, p.LatencyMaxMs, p.LatencyP95MaxMs, p.MinAliveStreak,
 		p.MinProbeSuccessRate, p.MaxLastProbeAgeNs, p.MinNodeAgeNs,
 		p.EgressIPVersion, countryFiltersJSON, asnFiltersJSON,
-		ipTypeFiltersJSON, ipFiltersJSON)
+		ipTypeFiltersJSON, ipFiltersJSON,
+		boolToInt(p.ProbeEnabled), p.ProbeURL, p.ProbeMethod, p.ProbeHeaders, p.ProbeBody,
+		passStatusJSON, boolToInt(p.ProbeFollowRedirects), p.ProbeIntervalNs, p.ProbeScope,
+		boolToInt(p.VerdictEnabled), p.BlacklistThreshold, p.RehabIntervalNs, p.RehabSuccessThreshold,
+		p.BlacklistEmptyPolicy, p.BlacklistGraceK)
 	if err != nil {
 		if isSQLiteUniqueConstraint(err) {
 			return fmt.Errorf("%w: platform name already exists", ErrConflict)

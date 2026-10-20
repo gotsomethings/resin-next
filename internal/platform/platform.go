@@ -97,6 +97,29 @@ type policyError struct{ msg string }
 
 func (e *policyError) Error() string { return e.msg }
 
+// ProbeConfig is the per-platform probe definition (P2).
+type ProbeConfig struct {
+	Enabled         bool
+	URL             string
+	Method          string
+	Headers         string
+	Body            string
+	PassStatus      []int
+	FollowRedirects bool
+	Interval        time.Duration
+	Scope           string
+}
+
+// VerdictConfig is the per-platform verdict/blacklist policy (P2).
+type VerdictConfig struct {
+	Enabled               bool
+	Threshold             int
+	RehabInterval         time.Duration
+	RehabSuccessThreshold int
+	EmptyPolicy           string
+	GraceK                int
+}
+
 // Platform represents a routing platform with its filtered routable view.
 type Platform struct {
 	ID   string
@@ -110,6 +133,11 @@ type Platform struct {
 	Policy Policy
 	// ASNLookup is optional; nil means "no ASN database loaded".
 	ASNLookup ASNLookupFunc
+
+	// Probe/Verdict configuration and the blacklist lookup (P2).
+	Probe           ProbeConfig
+	Verdict         VerdictConfig
+	BlacklistLookup func(netip.Addr) bool
 
 	// Other config fields.
 	StickyTTLNs                      int64
@@ -251,6 +279,11 @@ func (p *Platform) evaluateNode(
 	// 3. Egress IP must be known.
 	egressIP := entry.GetEgressIP()
 	if !egressIP.IsValid() {
+		return false
+	}
+
+	// 3b. Per-platform blacklist (verdict state machine).
+	if p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
 		return false
 	}
 
