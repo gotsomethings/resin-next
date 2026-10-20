@@ -134,8 +134,7 @@ const platformColumns = `id, name, sticky_ttl_ns, regex_filters_json, region_fil
 	ip_type_filters_json, egress_ip_filters_json,
 	probe_enabled, probe_url, probe_method, probe_headers, probe_body,
 	probe_pass_status_json, probe_follow_redirects, probe_interval_ns, probe_scope,
-	verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold,
-	blacklist_empty_policy, blacklist_grace_k`
+	verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold`
 
 // scanPlatform scans one row of platformColumns.
 func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform, error) {
@@ -156,7 +155,6 @@ func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform
 		&probeEnabled, &p.ProbeURL, &p.ProbeMethod, &p.ProbeHeaders, &p.ProbeBody,
 		&passStatusJSON, &probeFollowRedirects, &p.ProbeIntervalNs, &p.ProbeScope,
 		&verdictEnabled, &p.BlacklistThreshold, &p.RehabIntervalNs, &p.RehabSuccessThreshold,
-		&p.BlacklistEmptyPolicy, &p.BlacklistGraceK,
 	); err != nil {
 		return nil, err
 	}
@@ -277,9 +275,8 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		                       ip_type_filters_json, egress_ip_filters_json,
 		                       probe_enabled, probe_url, probe_method, probe_headers, probe_body,
 		                       probe_pass_status_json, probe_follow_redirects, probe_interval_ns, probe_scope,
-		                       verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold,
-		                       blacklist_empty_policy, blacklist_grace_k)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                       verdict_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name                     = excluded.name,
 			sticky_ttl_ns            = excluded.sticky_ttl_ns,
@@ -315,9 +312,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 			verdict_enabled          = excluded.verdict_enabled,
 			blacklist_threshold      = excluded.blacklist_threshold,
 			rehab_interval_ns        = excluded.rehab_interval_ns,
-			rehab_success_threshold  = excluded.rehab_success_threshold,
-			blacklist_empty_policy   = excluded.blacklist_empty_policy,
-			blacklist_grace_k        = excluded.blacklist_grace_k
+			rehab_success_threshold  = excluded.rehab_success_threshold
 	`, p.ID, p.Name, p.StickyTTLNs, regexFiltersJSON, regionFiltersJSON,
 		p.ReverseProxyMissAction, p.ReverseProxyEmptyAccountBehavior, p.ReverseProxyFixedAccountHeader,
 		p.AllocationPolicy, p.PassiveCircuitBreakerDisabled, p.UpdatedAtNs,
@@ -327,8 +322,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		ipTypeFiltersJSON, ipFiltersJSON,
 		boolToInt(p.ProbeEnabled), p.ProbeURL, p.ProbeMethod, p.ProbeHeaders, p.ProbeBody,
 		passStatusJSON, boolToInt(p.ProbeFollowRedirects), p.ProbeIntervalNs, p.ProbeScope,
-		boolToInt(p.VerdictEnabled), p.BlacklistThreshold, p.RehabIntervalNs, p.RehabSuccessThreshold,
-		p.BlacklistEmptyPolicy, p.BlacklistGraceK)
+		boolToInt(p.VerdictEnabled), p.BlacklistThreshold, p.RehabIntervalNs, p.RehabSuccessThreshold)
 	if err != nil {
 		if isSQLiteUniqueConstraint(err) {
 			return fmt.Errorf("%w: platform name already exists", ErrConflict)

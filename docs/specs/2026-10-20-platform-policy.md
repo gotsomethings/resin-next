@@ -34,7 +34,7 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 - `正常 --连续失败 N 次--> 黑名单`
 - `黑名单 --连续 M 次通过--> 正常`（洗白不放宽，中间任何一次失败清零重计）
 
-参数：`verdict_enabled`(false)、`blacklist_threshold`(N=3)、`rehab_interval`(X=6h)、`rehab_success_threshold`(M=3)、`blacklist_empty_policy`(strict | grace)、`blacklist_grace_k`。
+参数：`verdict_enabled`(false)、`blacklist_threshold`(N=3)、`rehab_interval`(X=6h)、`rehab_success_threshold`(M=3)。
 
 规则：
 
@@ -44,13 +44,7 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 - 新 IP（aimili 换绑）= 全新状态，自动可用不背旧账。
 - 台账 GC：IP 连续 30 天未出现清行（由 P3 governor 循环每 6h 触发）。
 
-### grace 语义（已定稿）
-
-- 默认 strict。
-- grace **仅在该平台可路由 IP 集合会被清空时触发**，不是随时触发。
-- 放行 K 个：按 `consecutive_fail` 升序；并列按最近一次成功时间新者优先；再并列按 IP 字典序（保证确定性）。
-- 被放行 IP **状态仍是 blacklisted**（继续按 6h 复探、仍计洗白进度），只是临时参与路由。
-- 每个探测/治理周期重算一次；一旦有正常 IP 可用立即退出 grace。
+黑名单严格生效：**不做任何兜底放行**。当平台可路由 IP 全部被拉黑时，请求直接失败（沿用现有 empty state 的 502），不临时放行“可能也不行”的 IP。
 
 ## 四、筛选维度
 

@@ -137,8 +137,6 @@ var platformPatchAllowedFields = map[string]bool{
 	"blacklist_threshold":     true,
 	"rehab_interval":          true,
 	"rehab_success_threshold": true,
-	"blacklist_empty_policy":  true,
-	"blacklist_grace_k":       true,
 }
 
 var subscriptionPatchAllowedFields = map[string]bool{

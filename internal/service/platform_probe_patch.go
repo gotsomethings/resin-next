@@ -24,8 +24,6 @@ type probePatch struct {
 	blacklistThreshold    *int
 	rehabInterval         *time.Duration
 	rehabSuccessThreshold *int
-	blacklistEmptyPolicy  *string
-	blacklistGraceK       *int
 }
 
 func probePatchFromCreate(req CreatePlatformRequest) probePatch {
@@ -40,8 +38,6 @@ func probePatchFromCreate(req CreatePlatformRequest) probePatch {
 		verdictEnabled:        req.VerdictEnabled,
 		blacklistThreshold:    req.BlacklistThreshold,
 		rehabSuccessThreshold: req.RehabSuccessThreshold,
-		blacklistEmptyPolicy:  req.BlacklistEmptyPolicy,
-		blacklistGraceK:       req.BlacklistGraceK,
 	}
 	if req.ProbePassStatus != nil {
 		p.passStatus = req.ProbePassStatus
@@ -130,16 +126,6 @@ func probePatchFromMerge(patch mergePatch) (probePatch, *ServiceError) {
 	} else if ok {
 		p.rehabSuccessThreshold = intPtr(v)
 	}
-	if v, ok, serr := patch.optionalString("blacklist_empty_policy"); serr != nil {
-		return p, serr
-	} else if ok {
-		p.blacklistEmptyPolicy = &v
-	}
-	if v, ok, serr := patch.optionalInt("blacklist_grace_k"); serr != nil {
-		return p, serr
-	} else if ok {
-		p.blacklistGraceK = intPtr(v)
-	}
 	return p, nil
 }
 
@@ -183,12 +169,6 @@ func applyProbePatch(probe *platform.ProbeConfig, verdict *platform.VerdictConfi
 	}
 	if p.rehabSuccessThreshold != nil {
 		verdict.RehabSuccessThreshold = *p.rehabSuccessThreshold
-	}
-	if p.blacklistEmptyPolicy != nil {
-		verdict.EmptyPolicy = *p.blacklistEmptyPolicy
-	}
-	if p.blacklistGraceK != nil {
-		verdict.GraceK = *p.blacklistGraceK
 	}
 	return nil
 }
@@ -234,11 +214,6 @@ func validateVerdictConfig(v platform.VerdictConfig) *ServiceError {
 	}
 	if v.RehabSuccessThreshold < 1 {
 		return invalidArg("rehab_success_threshold: must be >= 1")
-	}
-	switch v.EmptyPolicy {
-	case "", "strict", "grace":
-	default:
-		return invalidArg("blacklist_empty_policy: must be strict or grace")
 	}
 	return nil
 }

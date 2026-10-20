@@ -242,8 +242,6 @@ func VerdictFromModel(mp model.Platform) VerdictConfig {
 		Threshold:             mp.BlacklistThreshold,
 		RehabInterval:         time.Duration(mp.RehabIntervalNs),
 		RehabSuccessThreshold: mp.RehabSuccessThreshold,
-		EmptyPolicy:           mp.BlacklistEmptyPolicy,
-		GraceK:                mp.BlacklistGraceK,
 	}
 	if v.Threshold <= 0 {
 		v.Threshold = 3
@@ -253,9 +251,6 @@ func VerdictFromModel(mp model.Platform) VerdictConfig {
 	}
 	if v.RehabSuccessThreshold <= 0 {
 		v.RehabSuccessThreshold = 3
-	}
-	if v.EmptyPolicy == "" {
-		v.EmptyPolicy = "strict"
 	}
 	return v
 }
@@ -275,6 +270,4 @@ func ApplyProbeToModel(probe ProbeConfig, verdict VerdictConfig, mp *model.Platf
 	mp.BlacklistThreshold = verdict.Threshold
 	mp.RehabIntervalNs = int64(verdict.RehabInterval)
 	mp.RehabSuccessThreshold = verdict.RehabSuccessThreshold
-	mp.BlacklistEmptyPolicy = verdict.EmptyPolicy
-	mp.BlacklistGraceK = verdict.GraceK
 }

@@ -63,8 +63,6 @@ type PlatformResponse struct {
 	BlacklistThreshold    int    `json:"blacklist_threshold"`
 	RehabInterval         string `json:"rehab_interval"`
 	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
-	BlacklistEmptyPolicy  string `json:"blacklist_empty_policy"`
-	BlacklistGraceK       int    `json:"blacklist_grace_k"`
 }
 
 func platformToResponse(p model.Platform) PlatformResponse {
@@ -110,8 +108,6 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		BlacklistThreshold:    p.BlacklistThreshold,
 		RehabInterval:         time.Duration(p.RehabIntervalNs).String(),
 		RehabSuccessThreshold: p.RehabSuccessThreshold,
-		BlacklistEmptyPolicy:  p.BlacklistEmptyPolicy,
-		BlacklistGraceK:       p.BlacklistGraceK,
 	}
 }
 
@@ -452,8 +448,6 @@ type CreatePlatformRequest struct {
 	BlacklistThreshold    *int    `json:"blacklist_threshold"`
 	RehabInterval         *string `json:"rehab_interval"`
 	RehabSuccessThreshold *int    `json:"rehab_success_threshold"`
-	BlacklistEmptyPolicy  *string `json:"blacklist_empty_policy"`
-	BlacklistGraceK       *int    `json:"blacklist_grace_k"`
 }
 
 // CreatePlatform creates a new platform.

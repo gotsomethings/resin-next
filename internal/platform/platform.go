@@ -116,8 +116,6 @@ type VerdictConfig struct {
 	Threshold             int
 	RehabInterval         time.Duration
 	RehabSuccessThreshold int
-	EmptyPolicy           string
-	GraceK                int
 }
 
 // Platform represents a routing platform with its filtered routable view.
