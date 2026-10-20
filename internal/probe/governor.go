@@ -164,9 +164,10 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 		return
 	}
 
-	// Hysteresis band: neither counts as relaxed nor resets the streak. It also
-	// never accelerates a later step-down: the down path is gated by lastAdjust,
-	// which only advances when an actual step-down happens.
+	// Hysteresis band: pressure is neither critical nor clearly released.
+	// Break the recovery streak so recovery only happens after 3 truly relaxed
+	// samples in a row.
+	g.relaxRun = 0
 }
 
 func (g *Governor) report(effective int, reason string, at time.Time) {

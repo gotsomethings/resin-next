@@ -195,3 +195,31 @@ func TestGovernor_JitterDoesNotDoubleStep(t *testing.T) {
 		t.Fatalf("tight after the gate = %d, want 490", got)
 	}
 }
+
+// relaxed -> band -> relaxed -> relaxed must NOT recover until three truly
+// relaxed samples in a row (the band sample clears the streak).
+func TestGovernor_HysteresisBreaksRecoveryStreak(t *testing.T) {
+	m := newTestManager(1000)
+	m.SetEffectiveConcurrency(100)
+	g := NewGovernor(GovernorConfig{Manager: m})
+
+	band := ResourceSample{MemAvailableRatio: 0.20, ContainerMemRatio: 0.75}
+
+	// 1 relaxed -> streak 1
+	g.Step(time.Now(), relaxedSample())
+	// 2 band -> streak cleared
+	g.Step(time.Now().Add(30*time.Second), band)
+	// 3 and 4 relaxed -> streak 1 then 2, still not 3
+	g.Step(time.Now().Add(60*time.Second), relaxedSample())
+	g.Step(time.Now().Add(90*time.Second), relaxedSample())
+
+	if got := m.EffectiveConcurrency(); got != 100 {
+		t.Fatalf("band must break the streak: effective = %d, want 100 (no recovery yet)", got)
+	}
+
+	// 5th relaxed -> third in a row -> recover +30%% of settings -> 400
+	g.Step(time.Now().Add(120*time.Second), relaxedSample())
+	if got := m.EffectiveConcurrency(); got != 400 {
+		t.Fatalf("third consecutive relaxed sample must recover to 400, got %d", got)
+	}
+}
