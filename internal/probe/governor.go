@@ -12,10 +12,17 @@ import (
 
 // ResourceSample is one governance observation. Ratios are 0..1; a zero value
 // means "unknown" and is ignored by the pressure checks.
+const (
+	// pacingSamples is how many 30s samples make one adjustment window (60s).
+	pacingSamples = 2
+	// relaxSamples is how many consecutive relaxed samples are required before
+	// stepping back up.
+	relaxSamples = 3
+)
+
 type ResourceSample struct {
 	MemAvailableRatio float64 // host MemAvailable / MemTotal
 	ContainerMemRatio float64 // cgroup memory.current / memory.max
-	SwapUsedRatio     float64
 	LoadPerCPU        float64
 	CPUUtilization    float64
 }
@@ -42,8 +49,8 @@ type Governor struct {
 	wg       sync.WaitGroup
 
 	lastAdjust time.Time
-	tightRun   int
 	relaxRun   int
+	sinceAdj   int // samples since the last adjustment (pacing without wall-clock drift)
 }
 
 // NewGovernor creates a Governor.
@@ -121,9 +128,11 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 	relaxed := isRelaxed(s)
 
 	if tight {
-		g.tightRun++
 		g.relaxRun = 0
-		if g.tightRun >= 2 && now.Sub(g.lastAdjust) >= time.Minute {
+		g.sinceAdj++
+		// Single tight sample steps down immediately; sustained pressure then
+		// steps down once per pacing window (2 samples = 60s at the 30s interval).
+		if g.sinceAdj >= 1 && (g.lastAdjust.IsZero() || g.sinceAdj >= pacingSamples) {
 			next := effective * 7 / 10
 			if next < floor {
 				next = floor
@@ -131,7 +140,7 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 			if next < effective {
 				m.SetEffectiveConcurrency(next)
 				g.lastAdjust = now
-				g.tightRun = 1
+				g.sinceAdj = 0
 				g.report(next, reason, now)
 			}
 		}
@@ -140,15 +149,15 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 
 	if relaxed {
 		g.relaxRun++
-		g.tightRun = 0
-		if g.relaxRun >= 3 && now.Sub(g.lastAdjust) >= time.Minute && effective < settings {
+		g.sinceAdj++
+		if g.relaxRun >= relaxSamples && effective < settings && g.sinceAdj >= pacingSamples {
 			next := effective + settings*3/10
 			if next > settings {
 				next = settings
 			}
 			m.SetEffectiveConcurrency(next)
 			g.lastAdjust = now
-			g.relaxRun = 1
+			g.sinceAdj = 0
 			g.report(next, "pressure released", now)
 		}
 		return
@@ -170,8 +179,6 @@ func isTight(s ResourceSample) (bool, string) {
 		return true, "host memory available < 10%"
 	case s.ContainerMemRatio >= 0.85:
 		return true, "container memory >= 85%"
-	case s.SwapUsedRatio > 0.50:
-		return true, "swap used > 50%"
 	case s.LoadPerCPU > 0.90:
 		return true, "load per CPU > 0.9"
 	case s.CPUUtilization > 0.85:
@@ -185,9 +192,6 @@ func isRelaxed(s ResourceSample) bool {
 		return false
 	}
 	if s.ContainerMemRatio >= 0.70 {
-		return false
-	}
-	if s.SwapUsedRatio > 0.50 {
 		return false
 	}
 	if s.LoadPerCPU >= 0.70 {
@@ -208,9 +212,6 @@ func ReadResourceSample() (ResourceSample, error) {
 		vals := parseMeminfo(string(data))
 		if total := vals["MemTotal"]; total > 0 {
 			s.MemAvailableRatio = float64(vals["MemAvailable"]) / float64(total)
-		}
-		if swapTotal := vals["SwapTotal"]; swapTotal > 0 {
-			s.SwapUsedRatio = float64(swapTotal-vals["SwapFree"]) / float64(swapTotal)
 		}
 	}
 

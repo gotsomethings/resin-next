@@ -64,6 +64,7 @@ type ProbeManager struct {
 	// the governor lowers effectiveConcurrency without restarting anything.
 	settingsConcurrency  atomic.Int32
 	effectiveConcurrency atomic.Int32
+	inFlight             atomic.Int32
 	taskQueue   *probeTaskQueue
 	taskStates  *xsync.Map[probeTaskKey, *probeTaskState]
 
@@ -207,24 +208,6 @@ func (q *probeTaskQueue) Enqueue(task probeTask, priority probePriority) bool {
 	return true
 }
 
-// PushFront puts a throttled task back at the head of its priority lane.
-func (q *probeTaskQueue) PushFront(task probeTask, priority probePriority) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.stopped {
-		return
-	}
-	switch priority {
-	case probePriorityHigh:
-		q.high.items = append([]probeTask{task}, q.high.items[q.high.head:]...)
-		q.high.head = 0
-	default:
-		q.normal.items = append([]probeTask{task}, q.normal.items[q.normal.head:]...)
-		q.normal.head = 0
-	}
-	q.notEmpty.Signal()
-}
-
 func (q *probeTaskQueue) Dequeue() (probeTask, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -317,7 +300,31 @@ func (m *ProbeManager) EffectiveConcurrency() int {
 	return int(m.effectiveConcurrency.Load())
 }
 
+// clampEffective atomically pins effective into [1, settings].
+func (m *ProbeManager) clampEffective(n int) {
+	settings := int(m.settingsConcurrency.Load())
+	if settings < 1 {
+		settings = 1
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > settings {
+		n = settings
+	}
+	for {
+		cur := m.effectiveConcurrency.Load()
+		if cur == int32(n) {
+			return
+		}
+		if m.effectiveConcurrency.CompareAndSwap(cur, int32(n)) {
+			return
+		}
+	}
+}
+
 // SetSettingsConcurrency updates the configured ceiling (hot, no restart).
+// The effective limit follows the new ceiling when it was pinned to the old one.
 func (m *ProbeManager) SetSettingsConcurrency(n int) {
 	if n < 1 {
 		n = 1
@@ -325,22 +332,38 @@ func (m *ProbeManager) SetSettingsConcurrency(n int) {
 	if n > 10000 {
 		n = 10000
 	}
-	prev := int(m.settingsConcurrency.Swap(int32(n)))
-	if m.effectiveConcurrency.Load() >= int32(prev) || m.effectiveConcurrency.Load() < 1 {
-		m.effectiveConcurrency.Store(int32(n))
+	// Track the ceiling first, then clamp. Only an effective value that was
+	// pinned to the old ceiling follows the new one; anything lower is kept.
+	cur := int(m.effectiveConcurrency.Load())
+	m.settingsConcurrency.Store(int32(n))
+	if cur >= n {
+		cur = n
+	}
+	m.clampEffective(cur)
+}
+
+// SetEffectiveConcurrency pins the live dispatch limit (clamped to the ceiling).
+func (m *ProbeManager) SetEffectiveConcurrency(n int) {
+	m.clampEffective(n)
+}
+
+// acquireSlot reserves one dispatch slot with a CAS loop, guaranteeing that
+// inFlight never exceeds the live effective limit.
+func (m *ProbeManager) acquireSlot() bool {
+	for {
+		cur := m.inFlight.Load()
+		limit := m.effectiveConcurrency.Load()
+		if limit < 1 || cur >= limit {
+			return false
+		}
+		if m.inFlight.CompareAndSwap(cur, cur+1) {
+			return true
+		}
 	}
 }
 
-// SetEffectiveConcurrency pins the live dispatch limit.
-func (m *ProbeManager) SetEffectiveConcurrency(n int) {
-	settings := int(m.settingsConcurrency.Load())
-	if n < 1 {
-		n = 1
-	}
-	if settings > 0 && n > settings {
-		n = settings
-	}
-	m.effectiveConcurrency.Store(int32(n))
+func (m *ProbeManager) releaseSlot() {
+	m.inFlight.Add(-1)
 }
 
 // Start launches the background probe workers.
@@ -587,25 +610,25 @@ func (m *ProbeManager) runProbeWorker() {
 			return
 		}
 
-		// Dynamic throttling: park the task at the front of its lane while the
-		// live limit is saturated.
-		if int(m.effectiveConcurrency.Load()) <= m.runningCount() {
-			m.taskQueue.PushFront(task, probePriorityNormal)
+		// Dynamic throttling: hold this task and wait for a slot. Never push it
+		// back into the queue, so ordering is preserved and no copy happens.
+		for !m.acquireSlot() {
 			select {
 			case <-m.stopCh:
 				return
 			case <-time.After(throttleSleep):
 			}
-			continue
 		}
 
 		state, ok := m.markTaskRunning(task.key)
 		if !ok {
+			m.releaseSlot()
 			continue
 		}
 
 		m.executeTask(task)
 		m.finishTask(task.key, state)
+		m.releaseSlot()
 	}
 }
 
@@ -902,13 +925,3 @@ func (m *ProbeManager) currentLatencyTestURL() string {
 	return testURL
 }
 
-func (m *ProbeManager) runningCount() int {
-	count := 0
-	m.taskStates.Range(func(_ probeTaskKey, st *probeTaskState) bool {
-		if st.flags.Load()&taskFlagRunning != 0 {
-			count++
-		}
-		return true
-	})
-	return count
-}
