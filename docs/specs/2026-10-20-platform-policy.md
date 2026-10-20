@@ -65,9 +65,17 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 
 ## 五、换路（P4）
 
-`failover_enabled`(false)、`failover_max_switches`(3)、`failover_deadline`(15s)、`failover_stage`(connect)。
+参数：`failover_enabled`(false)、`failover_max_switches`(1–10，默认 3)、`failover_deadline`(1s–1m，默认 15s)、`failover_stage`(默认 `connect`)。
 
-行为：拨号失败换下一个可用节点；成功则租约重钉新节点；全败释放租约并报错。
+设计约束：
+
+1. **只对拨号阶段失败换路**（`DialContext` 返回错误）。隧道建立后的传输错误不重试。
+2. **双预算**：换路次数 ≤ `failover_max_switches`，总耗时 ≤ `failover_deadline`，任一耗尽立即停。
+3. **成功后必须重钉租约**：`Router.RebindLease` 选一个非故障、仍在可路由视图里的节点，改写该账号的 sticky lease 并更新 IP 负载计数；下一次请求即命中新节点。
+4. **全败**：`DeleteLease` 释放该账号租约（不留悬挂），并返回**原错误**（`connect_dial` + 原始 error）。
+5. **`failover_stage` 只实现 `connect`**。`first_byte` / `any` 为保留值，写入时**直接拒绝**（400 INVALID_ARGUMENT），不静默降级。
+
+测试：`TestConnectFailover_RebindsLeaseToNewNode`、`TestConnectFailover_BudgetExhaustedReleasesLease`。
 
 ## 六、并发治理（P3）
 

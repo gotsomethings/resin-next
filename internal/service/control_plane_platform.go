@@ -63,6 +63,12 @@ type PlatformResponse struct {
 	BlacklistThreshold    int    `json:"blacklist_threshold"`
 	RehabInterval         string `json:"rehab_interval"`
 	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
+
+	// Failover surface (P4).
+	FailoverEnabled     bool   `json:"failover_enabled"`
+	FailoverMaxSwitches int    `json:"failover_max_switches"`
+	FailoverDeadline    string `json:"failover_deadline"`
+	FailoverStage       string `json:"failover_stage"`
 }
 
 func platformToResponse(p model.Platform) PlatformResponse {
@@ -108,6 +114,11 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		BlacklistThreshold:    p.BlacklistThreshold,
 		RehabInterval:         time.Duration(p.RehabIntervalNs).String(),
 		RehabSuccessThreshold: p.RehabSuccessThreshold,
+
+		FailoverEnabled:     p.FailoverEnabled,
+		FailoverMaxSwitches: p.FailoverMaxSwitches,
+		FailoverDeadline:    time.Duration(p.FailoverDeadlineNs).String(),
+		FailoverStage:       p.FailoverStage,
 	}
 }
 
@@ -138,8 +149,9 @@ type platformConfig struct {
 	Policy platform.Policy
 
 	// Probe / verdict surface (P2).
-	Probe   platform.ProbeConfig
-	Verdict platform.VerdictConfig
+	Probe    platform.ProbeConfig
+	Verdict  platform.VerdictConfig
+	Failover platform.FailoverConfig
 }
 
 func normalizePlatformMissAction(raw string) string {
@@ -173,6 +185,7 @@ func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig 
 		AllocationPolicy: s.EnvCfg.DefaultPlatformAllocationPolicy,
 		Probe:            platform.ProbeFromModel(model.Platform{}),
 		Verdict:          platform.VerdictFromModel(model.Platform{}),
+		Failover:         platform.FailoverFromModel(model.Platform{}),
 	}
 }
 
@@ -190,6 +203,7 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 		Policy:                           platform.PolicyFromModel(mp),
 		Probe:                            platform.ProbeFromModel(mp),
 		Verdict:                          platform.VerdictFromModel(mp),
+		Failover:                         platform.FailoverFromModel(mp),
 	}
 }
 
@@ -209,6 +223,7 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 	}
 	platform.ApplyPolicyToModel(cfg.Policy, &mp)
 	platform.ApplyProbeToModel(cfg.Probe, cfg.Verdict, &mp)
+	platform.ApplyFailoverToModel(cfg.Failover, &mp)
 	return mp
 }
 
@@ -234,6 +249,7 @@ func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc,
 	plat.BlacklistLookup = blacklist
 	plat.Probe = cfg.Probe
 	plat.Verdict = cfg.Verdict
+	plat.Failover = cfg.Failover
 	return plat, nil
 }
 
@@ -351,6 +367,9 @@ func validatePlatformConfig(cfg *platformConfig, validateRegionFilters bool) *Se
 	if err := validateVerdictConfig(cfg.Verdict); err != nil {
 		return err
 	}
+	if err := validateFailoverConfig(cfg.Failover); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -448,6 +467,11 @@ type CreatePlatformRequest struct {
 	BlacklistThreshold    *int    `json:"blacklist_threshold"`
 	RehabInterval         *string `json:"rehab_interval"`
 	RehabSuccessThreshold *int    `json:"rehab_success_threshold"`
+
+	FailoverEnabled     *bool   `json:"failover_enabled"`
+	FailoverMaxSwitches *int    `json:"failover_max_switches"`
+	FailoverDeadline    *string `json:"failover_deadline"`
+	FailoverStage       *string `json:"failover_stage"`
 }
 
 // CreatePlatform creates a new platform.
@@ -511,6 +535,7 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 	if svcErr := applyProbePatch(&cfg.Probe, &cfg.Verdict, probePatchFromCreate(req)); svcErr != nil {
 		return nil, svcErr
 	}
+	applyFailoverPatch(&cfg.Failover, failoverPatchFromCreate(req))
 	if err := validatePlatformConfig(&cfg, true); err != nil {
 		return nil, err
 	}
@@ -642,6 +667,11 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 	if svcErr := applyProbePatch(&cfg.Probe, &cfg.Verdict, probePatch); svcErr != nil {
 		return nil, svcErr
 	}
+	failoverPatch, svcErr := failoverPatchFromMerge(patch)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	applyFailoverPatch(&cfg.Failover, failoverPatch)
 	if err := validatePlatformConfig(&cfg, regionFiltersPatched); err != nil {
 		return nil, err
 	}

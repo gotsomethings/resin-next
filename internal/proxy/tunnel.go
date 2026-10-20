@@ -99,6 +99,9 @@ func prepareConnectTunnel(
 		if deps.health != nil {
 			recordPassiveResultAsync(deps.health, routed.Route, false)
 		}
+		if res, ok := tryFailoverConnect(ctx, deps, platformName, account, target, routed.Route, proxyErr, err); ok {
+			return res
+		}
 		return tunnelPrepareResult{
 			route:         routed.Route,
 			proxyErr:      proxyErr,
@@ -127,6 +130,90 @@ func prepareConnectTunnel(
 
 	return tunnelPrepareResult{
 		route: routed.Route,
+		session: &preparedTunnel{
+			upstreamConn: upstreamConn,
+			recordResult: recordResult,
+		},
+	}
+}
+
+// tryFailoverConnect handles connect-stage failures only: it asks the router to
+// re-pin the account to another live node and retries the dial within the
+// platform's switch/deadline budget. It returns ok=false when failover is off.
+func tryFailoverConnect(
+	ctx context.Context,
+	deps tunnelDeps,
+	platformName, account, target string,
+	failedRoute routing.RouteResult,
+	proxyErr *ProxyError,
+	originalErr error,
+) (tunnelPrepareResult, bool) {
+	if deps.router == nil || failedRoute.PlatformID == "" {
+		return tunnelPrepareResult{}, false
+	}
+	plat, ok := deps.router.PlatformByID(failedRoute.PlatformID)
+	if !ok || !plat.Failover.Enabled {
+		return tunnelPrepareResult{}, false
+	}
+
+	deadline := time.Now().Add(plat.Failover.Deadline)
+	exclude := failedRoute.NodeHash
+	switches := 0
+	for switches < plat.Failover.MaxSwitches && time.Now().Before(deadline) {
+		route, err := deps.router.RebindLease(platformName, account, exclude)
+		if err != nil {
+			break
+		}
+		entry, ok := deps.pool.GetEntry(route.NodeHash)
+		if !ok || entry.Outbound.Load() == nil {
+			exclude = route.NodeHash
+			switches++
+			continue
+		}
+		conn, derr := (*entry.Outbound.Load()).DialContext(ctx, "tcp", M.ParseSocksaddr(target))
+		if derr == nil {
+			return buildTunnelSession(deps, route, conn, target), true
+		}
+		exclude = route.NodeHash
+		switches++
+	}
+
+	// Budget exhausted: drop the dangling lease and surface the original error.
+	if account != "" {
+		deps.router.DeleteLease(plat.ID, account)
+	}
+	return tunnelPrepareResult{
+		route:         failedRoute,
+		proxyErr:      proxyErr,
+		upstreamStage: "connect_dial",
+		upstreamErr:   originalErr,
+	}, true
+}
+
+// buildTunnelSession wraps a dialed connection into a prepared tunnel.
+func buildTunnelSession(deps tunnelDeps, route routing.RouteResult, rawConn net.Conn, target string) tunnelPrepareResult {
+	domain := netutil.ExtractDomain(target)
+	nodeHash := route.NodeHash
+	recordResult := func(ok bool) {
+		if deps.health != nil {
+			recordPassiveResultAsync(deps.health, route, ok)
+		}
+	}
+
+	var upstreamBase net.Conn = rawConn
+	if deps.metricsSink != nil {
+		deps.metricsSink.OnConnectionLifecycle(ConnectionOutbound, ConnectionOpen)
+		upstreamBase = newCountingConn(rawConn, deps.metricsSink)
+	}
+
+	upstreamConn := newTLSLatencyConn(upstreamBase, func(latency time.Duration) {
+		if deps.health != nil {
+			deps.health.RecordLatency(nodeHash, domain, &latency)
+		}
+	})
+
+	return tunnelPrepareResult{
+		route: route,
 		session: &preparedTunnel{
 			upstreamConn: upstreamConn,
 			recordResult: recordResult,

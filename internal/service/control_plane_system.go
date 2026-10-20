@@ -138,6 +138,10 @@ var platformPatchAllowedFields = map[string]bool{
 	"blacklist_threshold":     true,
 	"rehab_interval":          true,
 	"rehab_success_threshold": true,
+	"failover_enabled":        true,
+	"failover_max_switches":   true,
+	"failover_deadline":       true,
+	"failover_stage":          true,
 }
 
 var subscriptionPatchAllowedFields = map[string]bool{

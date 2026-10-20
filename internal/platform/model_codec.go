@@ -255,6 +255,34 @@ func VerdictFromModel(mp model.Platform) VerdictConfig {
 	return v
 }
 
+// FailoverFromModel extracts the failover config with defaults applied.
+func FailoverFromModel(mp model.Platform) FailoverConfig {
+	f := FailoverConfig{
+		Enabled:     mp.FailoverEnabled,
+		MaxSwitches: mp.FailoverMaxSwitches,
+		Deadline:    time.Duration(mp.FailoverDeadlineNs),
+		Stage:       mp.FailoverStage,
+	}
+	if f.MaxSwitches <= 0 {
+		f.MaxSwitches = 3
+	}
+	if f.Deadline <= 0 {
+		f.Deadline = 15 * time.Second
+	}
+	if f.Stage == "" {
+		f.Stage = "connect"
+	}
+	return f
+}
+
+// ApplyFailoverToModel writes the failover config back onto a model platform.
+func ApplyFailoverToModel(f FailoverConfig, mp *model.Platform) {
+	mp.FailoverEnabled = f.Enabled
+	mp.FailoverMaxSwitches = f.MaxSwitches
+	mp.FailoverDeadlineNs = int64(f.Deadline)
+	mp.FailoverStage = f.Stage
+}
+
 // ApplyProbeToModel writes probe/verdict config back onto a model platform.
 func ApplyProbeToModel(probe ProbeConfig, verdict VerdictConfig, mp *model.Platform) {
 	mp.ProbeEnabled = probe.Enabled

@@ -118,6 +118,14 @@ type VerdictConfig struct {
 	RehabSuccessThreshold int
 }
 
+// FailoverConfig controls connect-stage node switching (P4).
+type FailoverConfig struct {
+	Enabled     bool
+	MaxSwitches int
+	Deadline    time.Duration
+	Stage       string // only "connect" is implemented
+}
+
 // Platform represents a routing platform with its filtered routable view.
 type Platform struct {
 	ID   string
@@ -135,6 +143,7 @@ type Platform struct {
 	// Probe/Verdict configuration and the blacklist lookup (P2).
 	Probe           ProbeConfig
 	Verdict         VerdictConfig
+	Failover        FailoverConfig
 	BlacklistLookup func(netip.Addr) bool
 
 	// Other config fields.

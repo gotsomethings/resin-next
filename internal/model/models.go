@@ -45,6 +45,12 @@ type Platform struct {
 	BlacklistThreshold    int    `json:"blacklist_threshold"`
 	RehabIntervalNs       int64  `json:"rehab_interval_ns"`
 	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
+
+	// --- Failover (P4) ---
+	FailoverEnabled     bool   `json:"failover_enabled"`
+	FailoverMaxSwitches int    `json:"failover_max_switches"`
+	FailoverDeadlineNs  int64  `json:"failover_deadline_ns"`
+	FailoverStage       string `json:"failover_stage"`
 }
 
 // PlatformEgressIP is one row of the per-platform egress-IP ledger.
