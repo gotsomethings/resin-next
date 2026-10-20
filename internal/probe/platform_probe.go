@@ -119,7 +119,12 @@ type probeCandidate struct {
 	ip   netip.Addr
 }
 
+// sweep probes one platform. Disabled platforms are a hard no-op: the guard
+// lives here (not only in sweepAll) so every entry point honours the switch.
 func (p *PlatformProbe) sweep(t PlatformTarget) {
+	if !t.Probe.Enabled || t.Probe.URL == "" {
+		return
+	}
 	now := time.Now()
 	interval := t.Probe.Interval
 	if interval <= 0 {
