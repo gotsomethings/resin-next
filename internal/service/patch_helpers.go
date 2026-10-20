@@ -132,3 +132,16 @@ func parseHTTPAbsoluteURL(field, value string) (*url.URL, *ServiceError) {
 	}
 	return u, nil
 }
+
+
+func (p mergePatch) optionalFloat(field string) (float64, bool, *ServiceError) {
+	raw, ok := p[field]
+	if !ok {
+		return 0, false, nil
+	}
+	value, ok := raw.(float64)
+	if !ok {
+		return 0, true, invalidArg(fmt.Sprintf("%s: must be a number", field))
+	}
+	return value, true, nil
+}

@@ -222,3 +222,19 @@ func HandlePreviewFilter(cp *service.ControlPlaneService) http.HandlerFunc {
 		WritePage(w, http.StatusOK, nodes, pg)
 	}
 }
+
+// HandleListPlatformEgress returns a handler for GET /api/v1/platforms/{id}/egress.
+func HandleListPlatformEgress(cp *service.ControlPlaneService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := requireUUIDPathParam(w, r, "id", "platform_id")
+		if !ok {
+			return
+		}
+		rows, err := cp.ListPlatformEgress(id)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"items": rows, "total": len(rows)})
+	}
+}

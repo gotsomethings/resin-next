@@ -33,6 +33,20 @@ type PlatformResponse struct {
 	AllocationPolicy                 string   `json:"allocation_policy"`
 	PassiveCircuitBreakerDisabled    bool     `json:"passive_circuit_breaker_disabled"`
 	UpdatedAt                        string   `json:"updated_at"`
+
+	// Policy surface (P1).
+	LatencyTopN          int      `json:"latency_top_n"`
+	LatencyMaxMs         int      `json:"latency_max_ms"`
+	LatencyP95MaxMs      int      `json:"latency_p95_max_ms"`
+	MinAliveStreak       int      `json:"min_alive_streak"`
+	MinProbeSuccessRate  float64  `json:"min_probe_success_rate"`
+	MaxLastProbeAge      string   `json:"max_last_probe_age"`
+	MinNodeAge           string   `json:"min_node_age"`
+	EgressIPVersion      string   `json:"egress_ip_version"`
+	EgressCountryFilters []string `json:"egress_country_filters"`
+	ASNFilters           []string `json:"asn_filters"`
+	IPTypeFilters        []string `json:"ip_type_filters"`
+	EgressIPFilters      []string `json:"egress_ip_filters"`
 }
 
 func platformToResponse(p model.Platform) PlatformResponse {
@@ -51,6 +65,19 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		AllocationPolicy:                 p.AllocationPolicy,
 		PassiveCircuitBreakerDisabled:    p.PassiveCircuitBreakerDisabled,
 		UpdatedAt:                        time.Unix(0, p.UpdatedAtNs).UTC().Format(time.RFC3339Nano),
+
+		LatencyTopN:          p.LatencyTopN,
+		LatencyMaxMs:         p.LatencyMaxMs,
+		LatencyP95MaxMs:      p.LatencyP95MaxMs,
+		MinAliveStreak:       p.MinAliveStreak,
+		MinProbeSuccessRate:  p.MinProbeSuccessRate,
+		MaxLastProbeAge:      time.Duration(p.MaxLastProbeAgeNs).String(),
+		MinNodeAge:           time.Duration(p.MinNodeAgeNs).String(),
+		EgressIPVersion:      p.EgressIPVersion,
+		EgressCountryFilters: append([]string(nil), p.EgressCountryFilters...),
+		ASNFilters:           append([]string(nil), p.ASNFilters...),
+		IPTypeFilters:        append([]string(nil), p.IPTypeFilters...),
+		EgressIPFilters:      append([]string(nil), p.EgressIPFilters...),
 	}
 }
 
@@ -76,6 +103,9 @@ type platformConfig struct {
 	ReverseProxyFixedAccountHeader   string
 	AllocationPolicy                 string
 	PassiveCircuitBreakerDisabled    bool
+
+	// Policy surface (P1).
+	Policy platform.Policy
 }
 
 func normalizePlatformMissAction(raw string) string {
@@ -121,11 +151,12 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 		ReverseProxyFixedAccountHeader:   normalizeHeaderFieldName(mp.ReverseProxyFixedAccountHeader),
 		AllocationPolicy:                 mp.AllocationPolicy,
 		PassiveCircuitBreakerDisabled:    mp.PassiveCircuitBreakerDisabled,
+		Policy:                           platform.PolicyFromModel(mp),
 	}
 }
 
 func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
-	return model.Platform{
+	mp := model.Platform{
 		ID:                               id,
 		Name:                             cfg.Name,
 		StickyTTLNs:                      cfg.StickyTTLNs,
@@ -138,25 +169,30 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 		PassiveCircuitBreakerDisabled:    cfg.PassiveCircuitBreakerDisabled,
 		UpdatedAtNs:                      updatedAtNs,
 	}
+	platform.ApplyPolicyToModel(cfg.Policy, &mp)
+	return mp
 }
 
-func (cfg platformConfig) toRuntime(id string) (*platform.Platform, error) {
+func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc) (*platform.Platform, error) {
 	compiledRegexFilters, err := platform.CompileRegexFilters(cfg.RegexFilters)
 	if err != nil {
 		return nil, err
 	}
-	return platform.NewConfiguredPlatform(
+	plat := platform.NewConfiguredPlatformWithPolicy(
 		id,
 		cfg.Name,
 		compiledRegexFilters,
 		cfg.RegionFilters,
+		cfg.Policy,
 		cfg.StickyTTLNs,
 		cfg.ReverseProxyMissAction,
 		cfg.ReverseProxyEmptyAccountBehavior,
 		cfg.ReverseProxyFixedAccountHeader,
 		cfg.AllocationPolicy,
 		cfg.PassiveCircuitBreakerDisabled,
-	), nil
+	)
+	plat.ASNLookup = asnLookup
+	return plat, nil
 }
 
 func validatePlatformMissAction(raw string) *ServiceError {
@@ -264,6 +300,9 @@ func validatePlatformConfig(cfg *platformConfig, validateRegionFilters bool) *Se
 	if err := validatePlatformEmptyAccountConfig(cfg); err != nil {
 		return err
 	}
+	if err := platform.Validate(cfg.Policy); err != nil {
+		return invalidArg(err.Error())
+	}
 	return nil
 }
 
@@ -272,7 +311,7 @@ func (s *ControlPlaneService) compileAndUpsertPlatform(id string, cfg platformCo
 		return model.Platform{}, nil, invalidArg("name: " + err.Error())
 	}
 
-	plat, err := cfg.toRuntime(id)
+	plat, err := cfg.toRuntime(id, s.asnLookupFunc())
 	if err != nil {
 		return model.Platform{}, nil, invalidArg(err.Error())
 	}
@@ -334,6 +373,19 @@ type CreatePlatformRequest struct {
 	ReverseProxyFixedAccountHeader   *string  `json:"reverse_proxy_fixed_account_header"`
 	AllocationPolicy                 *string  `json:"allocation_policy"`
 	PassiveCircuitBreakerDisabled    *bool    `json:"passive_circuit_breaker_disabled"`
+
+	LatencyTopN          *int     `json:"latency_top_n"`
+	LatencyMaxMs         *int     `json:"latency_max_ms"`
+	LatencyP95MaxMs      *int     `json:"latency_p95_max_ms"`
+	MinAliveStreak       *int     `json:"min_alive_streak"`
+	MinProbeSuccessRate  *float64 `json:"min_probe_success_rate"`
+	MaxLastProbeAge      *string  `json:"max_last_probe_age"`
+	MinNodeAge           *string  `json:"min_node_age"`
+	EgressIPVersion      *string  `json:"egress_ip_version"`
+	EgressCountryFilters []string `json:"egress_country_filters"`
+	ASNFilters           []string `json:"asn_filters"`
+	IPTypeFilters        []string `json:"ip_type_filters"`
+	EgressIPFilters      []string `json:"egress_ip_filters"`
 }
 
 // CreatePlatform creates a new platform.
@@ -390,6 +442,9 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 	}
 	if req.PassiveCircuitBreakerDisabled != nil {
 		cfg.PassiveCircuitBreakerDisabled = *req.PassiveCircuitBreakerDisabled
+	}
+	if svcErr := applyPolicyPatch(&cfg.Policy, policyPatchFromCreate(req)); svcErr != nil {
+		return nil, svcErr
 	}
 	if err := validatePlatformConfig(&cfg, true); err != nil {
 		return nil, err
@@ -508,6 +563,13 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 	} else if ok {
 		cfg.PassiveCircuitBreakerDisabled = disabled
 	}
+	policyPatch, svcErr := policyPatchFromMerge(patch)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	if svcErr := applyPolicyPatch(&cfg.Policy, policyPatch); svcErr != nil {
+		return nil, svcErr
+	}
 	if err := validatePlatformConfig(&cfg, regionFiltersPatched); err != nil {
 		return nil, err
 	}
@@ -585,6 +647,46 @@ type PreviewFilterRequest struct {
 type PlatformSpecFilter struct {
 	RegexFilters  []string `json:"regex_filters"`
 	RegionFilters []string `json:"region_filters"`
+
+	LatencyTopN          int      `json:"latency_top_n"`
+	LatencyMaxMs         int      `json:"latency_max_ms"`
+	LatencyP95MaxMs      int      `json:"latency_p95_max_ms"`
+	MinAliveStreak       int      `json:"min_alive_streak"`
+	MinProbeSuccessRate  float64  `json:"min_probe_success_rate"`
+	MaxLastProbeAge      string   `json:"max_last_probe_age"`
+	MinNodeAge           string   `json:"min_node_age"`
+	EgressIPVersion      string   `json:"egress_ip_version"`
+	EgressCountryFilters []string `json:"egress_country_filters"`
+	ASNFilters           []string `json:"asn_filters"`
+	IPTypeFilters        []string `json:"ip_type_filters"`
+	EgressIPFilters      []string `json:"egress_ip_filters"`
+}
+
+// policy converts the preview spec into a platform policy.
+func (f PlatformSpecFilter) policy() platform.Policy {
+	p := platform.Policy{
+		LatencyTopN:          f.LatencyTopN,
+		LatencyMaxMs:         f.LatencyMaxMs,
+		LatencyP95MaxMs:      f.LatencyP95MaxMs,
+		MinAliveStreak:       f.MinAliveStreak,
+		MinProbeSuccessRate:  f.MinProbeSuccessRate,
+		EgressIPVersion:      f.EgressIPVersion,
+		EgressCountryFilters: append([]string(nil), f.EgressCountryFilters...),
+		ASNFilters:           append([]string(nil), f.ASNFilters...),
+		IPTypeFilters:        append([]string(nil), f.IPTypeFilters...),
+		EgressIPFilters:      append([]string(nil), f.EgressIPFilters...),
+	}
+	if f.MaxLastProbeAge != "" {
+		if d, err := time.ParseDuration(f.MaxLastProbeAge); err == nil {
+			p.MaxLastProbeAge = d
+		}
+	}
+	if f.MinNodeAge != "" {
+		if d, err := time.ParseDuration(f.MinNodeAge); err == nil {
+			p.MinNodeAge = d
+		}
+	}
+	return p
 }
 
 // NodeSummary is the API response for a node.
@@ -707,6 +809,7 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 
 	var regexFilters node.TagFilter
 	var regionFilters []string
+	var policy platform.Policy
 
 	if hasPlatformID {
 		plat, ok := s.Pool.GetPlatform(*req.PlatformID)
@@ -714,7 +817,8 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 			return nil, notFound("platform not found")
 		}
 		regexFilters = plat.RegexFilters
-		regionFilters = plat.RegionFilters
+		regionFilters = append([]string(nil), plat.RegionFilters...)
+		policy = plat.Policy
 	} else {
 		compiled, err := platform.CompileRegexFilters(req.PlatformSpec.RegexFilters)
 		if err != nil {
@@ -725,28 +829,102 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 		if err := platform.ValidateRegionFilters(regionFilters); err != nil {
 			return nil, invalidArg(err.Error())
 		}
+		policy = req.PlatformSpec.policy()
+		if err := platform.Validate(policy); err != nil {
+			return nil, invalidArg(err.Error())
+		}
 	}
 
-	var subLookup node.SubLookupFunc
-	if s.Pool != nil {
-		subLookup = s.Pool.MakeSubLookup()
+	tmp := platform.NewConfiguredPlatformWithPolicy(
+		"preview", "preview", regexFilters, regionFilters, policy,
+		0, string(platform.ReverseProxyMissActionTreatAsEmpty),
+		string(platform.ReverseProxyEmptyAccountBehaviorRandom), "", "BALANCED", false,
+	)
+	tmp.ASNLookup = s.asnLookupFunc()
+
+	subLookup := s.Pool.MakeSubLookup()
+	poolRange := func(fn func(node.Hash, *node.NodeEntry) bool) {
+		s.Pool.Range(fn)
 	}
+	tmp.FullRebuild(poolRange, subLookup, s.geoLookup())
+
 	var result []NodeSummary
-	s.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
-		if !entry.MatchTagFilter(regexFilters, subLookup) {
+	tmp.View().Range(func(h node.Hash) bool {
+		entry, ok := s.Pool.GetEntry(h)
+		if !ok {
 			return true
-		}
-		if len(regionFilters) > 0 {
-			region := entry.GetRegion(nil)
-			if s.GeoIP != nil {
-				region = entry.GetRegion(s.GeoIP.Lookup)
-			}
-			if !platform.MatchRegionFilter(region, regionFilters) {
-				return true
-			}
 		}
 		result = append(result, s.nodeEntryToSummary(h, entry))
 		return true
 	})
 	return result, nil
+}
+
+// PlatformEgressIPResponse is one ledger row for a platform.
+type PlatformEgressIPResponse struct {
+	IP              string `json:"ip"`
+	State           string `json:"state"`
+	FailureCount    int    `json:"failure_count"`
+	SuccessStreak   int    `json:"success_streak"`
+	LastResult      string `json:"last_result"`
+	LastProbeAt     string `json:"last_probe_at,omitempty"`
+	LastSuccessAt   string `json:"last_success_at,omitempty"`
+	FirstSeen       string `json:"first_seen,omitempty"`
+	LastSeen        string `json:"last_seen,omitempty"`
+	NodeCount       int    `json:"node_count"`
+}
+
+func formatUnixNs(ns int64) string {
+	if ns <= 0 {
+		return ""
+	}
+	return time.Unix(0, ns).UTC().Format(time.RFC3339Nano)
+}
+
+// ListPlatformEgress returns the per-platform egress-IP ledger joined with the
+// current node count per IP. P1: ledger is empty until P2 starts writing it.
+func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformEgressIPResponse, error) {
+	if _, err := s.getPlatformModel(platformID); err != nil {
+		return nil, err
+	}
+
+	nodeCounts := make(map[string]int)
+	if s.Pool != nil {
+		s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+			ip := entry.GetEgressIP()
+			if ip.IsValid() {
+				nodeCounts[ip.String()]++
+			}
+			return true
+		})
+	}
+
+	rows, err := s.Engine.ListPlatformEgressIPs(platformID)
+	if err != nil {
+		return nil, internal("list platform egress ips", err)
+	}
+	out := make([]PlatformEgressIPResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PlatformEgressIPResponse{
+			IP:            r.IP,
+			State:         r.State,
+			FailureCount:  r.FailureCount,
+			SuccessStreak: r.SuccessStreak,
+			LastResult:    r.LastResult,
+			LastProbeAt:   formatUnixNs(r.LastProbeAtNs),
+			LastSuccessAt: formatUnixNs(r.LastSuccessAtNs),
+			FirstSeen:     formatUnixNs(r.FirstSeenNs),
+			LastSeen:      formatUnixNs(r.LastSeenNs),
+			NodeCount:     nodeCounts[r.IP],
+		})
+	}
+	return out, nil
+}
+
+// geoLookup adapts the optional GeoIP service.
+func (s *ControlPlaneService) geoLookup() platform.GeoLookupFunc {
+	if s == nil || s.GeoIP == nil {
+		return nil
+	}
+	return s.GeoIP.Lookup
 }

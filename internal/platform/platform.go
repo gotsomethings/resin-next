@@ -3,7 +3,9 @@ package platform
 import (
 	"net/netip"
 	"regexp"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/Resinat/Resin/internal/node"
 )
@@ -23,6 +25,78 @@ type PoolRangeFunc func(fn func(node.Hash, *node.NodeEntry) bool)
 // GetEntryFunc retrieves a node entry from the global pool by hash.
 type GetEntryFunc func(node.Hash) (*node.NodeEntry, bool)
 
+// Policy holds the 11-dimension filter surface added in P1.
+// Zero values mean "not configured" and never filter anything out.
+type Policy struct {
+	LatencyTopN         int
+	LatencyMaxMs        int
+	LatencyP95MaxMs     int
+	MinAliveStreak      int
+	MinProbeSuccessRate float64 // 0..1
+	MaxLastProbeAge     time.Duration
+	MinNodeAge          time.Duration
+	EgressIPVersion     string // "", "v4", "v6"
+	EgressCountryFilters []string
+	ASNFilters          []string
+	IPTypeFilters       []string
+	EgressIPFilters     []string
+}
+
+// IsZero reports whether no policy dimension is configured.
+func (p Policy) IsZero() bool {
+	return p.LatencyTopN == 0 && p.LatencyMaxMs == 0 && p.LatencyP95MaxMs == 0 &&
+		p.MinAliveStreak == 0 && p.MinProbeSuccessRate == 0 && p.MaxLastProbeAge == 0 &&
+		p.MinNodeAge == 0 && p.EgressIPVersion == "" && len(p.EgressCountryFilters) == 0 &&
+		len(p.ASNFilters) == 0 && len(p.IPTypeFilters) == 0 && len(p.EgressIPFilters) == 0
+}
+
+// Validate checks all policy fields without touching the pool.
+func Validate(p Policy) error {
+	if p.LatencyTopN < 0 {
+		return errorf("latency_top_n: must be >= 0")
+	}
+	if p.LatencyMaxMs < 0 {
+		return errorf("latency_max_ms: must be >= 0")
+	}
+	if p.LatencyP95MaxMs < 0 {
+		return errorf("latency_p95_max_ms: must be >= 0")
+	}
+	if p.MinAliveStreak < 0 {
+		return errorf("min_alive_streak: must be >= 0")
+	}
+	if p.MinProbeSuccessRate < 0 || p.MinProbeSuccessRate > 1 {
+		return errorf("min_probe_success_rate: must be between 0 and 1")
+	}
+	if p.MaxLastProbeAge < 0 {
+		return errorf("max_last_probe_age: must be >= 0")
+	}
+	if p.MinNodeAge < 0 {
+		return errorf("min_node_age: must be >= 0")
+	}
+	if err := ValidateEgressIPVersion(p.EgressIPVersion); err != nil {
+		return err
+	}
+	if err := ValidateEgressCountryFilters(p.EgressCountryFilters); err != nil {
+		return err
+	}
+	if err := ValidateASNFilters(p.ASNFilters); err != nil {
+		return err
+	}
+	if err := ValidateIPTypeFilters(p.IPTypeFilters); err != nil {
+		return err
+	}
+	if err := ValidateEgressIPFilters(p.EgressIPFilters); err != nil {
+		return err
+	}
+	return nil
+}
+
+func errorf(msg string) error { return &policyError{msg: msg} }
+
+type policyError struct{ msg string }
+
+func (e *policyError) Error() string { return e.msg }
+
 // Platform represents a routing platform with its filtered routable view.
 type Platform struct {
 	ID   string
@@ -31,6 +105,11 @@ type Platform struct {
 	// Filter configuration.
 	RegexFilters  node.TagFilter
 	RegionFilters []string // lowercase ISO codes, supports negation "!xx"
+
+	// Policy is the 11-dimension filter surface.
+	Policy Policy
+	// ASNLookup is optional; nil means "no ASN database loaded".
+	ASNLookup ASNLookupFunc
 
 	// Other config fields.
 	StickyTTLNs                      int64
@@ -70,6 +149,12 @@ func (p *Platform) View() ReadOnlyView {
 	return p.view
 }
 
+// NeedsFullRebuild reports whether incremental NotifyDirty is insufficient.
+// A latency Top-N policy is a global ranking, so it always needs a full pass.
+func (p *Platform) NeedsFullRebuild() bool {
+	return p.Policy.LatencyTopN > 0
+}
+
 // FullRebuild clears the routable view and re-evaluates all nodes from the pool.
 // Acquires viewMu — any concurrent NotifyDirty calls block until rebuild completes.
 func (p *Platform) FullRebuild(
@@ -81,16 +166,40 @@ func (p *Platform) FullRebuild(
 	defer p.viewMu.Unlock()
 
 	p.view.Clear()
+
+	type candidate struct {
+		hash    node.Hash
+		latency float64
+	}
+	var candidates []candidate
+
 	poolRange(func(h node.Hash, entry *node.NodeEntry) bool {
 		if p.evaluateNode(entry, subLookup, geoLookup) {
-			p.view.Add(h)
+			lat, _, ok := nodeLatencyMs(entry)
+			if !ok {
+				lat = 0
+			}
+			candidates = append(candidates, candidate{hash: h, latency: lat})
 		}
 		return true
 	})
+
+	if topN := p.Policy.LatencyTopN; topN > 0 && len(candidates) > topN {
+		sort.SliceStable(candidates, func(i, j int) bool {
+			return candidates[i].latency < candidates[j].latency
+		})
+		candidates = candidates[:topN]
+	}
+
+	for _, c := range candidates {
+		p.view.Add(c.hash)
+	}
 }
 
 // NotifyDirty re-evaluates a single node and adds/removes it from the view.
 // Acquires viewMu — serialized with FullRebuild.
+// When the platform has a Top-N policy, incremental evaluation is skipped; the
+// caller must run FullRebuild (see NeedsFullRebuild).
 func (p *Platform) NotifyDirty(
 	h node.Hash,
 	getEntry GetEntryFunc,
@@ -99,6 +208,10 @@ func (p *Platform) NotifyDirty(
 ) {
 	p.viewMu.Lock()
 	defer p.viewMu.Unlock()
+
+	if p.Policy.LatencyTopN > 0 {
+		return
+	}
 
 	entry, ok := getEntry(h)
 	if !ok {
@@ -154,7 +267,121 @@ func (p *Platform) evaluateNode(
 		return false
 	}
 
+	pol := p.Policy
+	now := time.Now()
+
+	// 6. latency_max_ms.
+	if pol.LatencyMaxMs > 0 {
+		latMs, _, ok := nodeLatencyMs(entry)
+		if !ok || latMs > float64(pol.LatencyMaxMs) {
+			return false
+		}
+	}
+
+	// 7. latency_p95_max_ms.
+	if pol.LatencyP95MaxMs > 0 {
+		p95 := time.Duration(entry.P95LatencyNs.Load())
+		if p95 <= 0 || p95.Milliseconds() > int64(pol.LatencyP95MaxMs) {
+			return false
+		}
+	}
+
+	// 8. min_alive_streak.
+	if pol.MinAliveStreak > 0 {
+		if int(entry.AliveStreak.Load()) < pol.MinAliveStreak {
+			return false
+		}
+	}
+
+	// 9. min_probe_success_rate.
+	if pol.MinProbeSuccessRate > 0 {
+		rate, ok := entry.ProbeSuccessRate(now)
+		if !ok || rate < pol.MinProbeSuccessRate {
+			return false
+		}
+	}
+
+	// 10. max_last_probe_age.
+	if pol.MaxLastProbeAge > 0 {
+		last := entry.LastProbeSuccess.Load()
+		if last <= 0 || now.Sub(time.Unix(0, last)) > pol.MaxLastProbeAge {
+			return false
+		}
+	}
+
+	// 11. min_node_age.
+	if pol.MinNodeAge > 0 {
+		if now.Sub(entry.CreatedAt) < pol.MinNodeAge {
+			return false
+		}
+	}
+
+	// 12. egress_ip_version.
+	if !MatchEgressIPVersion(egressIP, pol.EgressIPVersion) {
+		return false
+	}
+
+	// 13. egress_country_filters (real egress country, not the tag country).
+	if len(pol.EgressCountryFilters) > 0 {
+		country := ""
+		if geoLookup != nil {
+			country = geoLookup(egressIP)
+		}
+		if !MatchRegionFilter(country, pol.EgressCountryFilters) {
+			return false
+		}
+	}
+
+	// 14/15. ASN and IP type.
+	if len(pol.ASNFilters) > 0 || len(pol.IPTypeFilters) > 0 {
+		var info ASNInfo
+		ok := false
+		if p.ASNLookup != nil {
+			info, ok = p.ASNLookup(egressIP)
+		}
+		if !MatchASNFilter(info, ok, pol.ASNFilters) {
+			return false
+		}
+		if !MatchIPTypeFilter(info, ok, pol.IPTypeFilters) {
+			return false
+		}
+	}
+
+	// 16. Manual egress IP allow/deny.
+	if !MatchEgressIPFilter(egressIP, pol.EgressIPFilters) {
+		return false
+	}
+
 	return true
+}
+
+// nodeLatencyMs returns the node's average EWMA latency in ms across all
+// domains currently in its latency table.
+func nodeLatencyMs(entry *node.NodeEntry) (avg float64, p95 float64, ok bool) {
+	if entry == nil || entry.LatencyTable == nil {
+		return 0, 0, false
+	}
+	var sum float64
+	var count int
+	var values []float64
+	entry.LatencyTable.Range(func(_ string, stats node.DomainLatencyStats) bool {
+		ms := float64(stats.Ewma) / float64(time.Millisecond)
+		sum += ms
+		count++
+		values = append(values, ms)
+		return true
+	})
+	if count == 0 {
+		return 0, 0, false
+	}
+	avg = sum / float64(count)
+	sort.Float64s(values)
+	idx := int(float64(len(values)-1) * 0.95)
+	if idx < 0 {
+		idx = 0
+	}
+	p95 = values[idx]
+	return avg, p95, true
 }
 
 // MatchRegionFilter applies include/exclude region filters.

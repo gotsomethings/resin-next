@@ -16,6 +16,35 @@ type Platform struct {
 	AllocationPolicy                 string `json:"allocation_policy"`
 	PassiveCircuitBreakerDisabled    bool   `json:"passive_circuit_breaker_disabled"`
 	UpdatedAtNs                      int64  `json:"updated_at_ns"`
+
+	// --- Platform policy (11-dimension filter surface, P1) ---
+	LatencyTopN          int     `json:"latency_top_n"`
+	LatencyMaxMs         int     `json:"latency_max_ms"`
+	LatencyP95MaxMs      int     `json:"latency_p95_max_ms"`
+	MinAliveStreak       int     `json:"min_alive_streak"`
+	MinProbeSuccessRate  float64 `json:"min_probe_success_rate"`
+	MaxLastProbeAgeNs    int64   `json:"max_last_probe_age_ns"`
+	MinNodeAgeNs         int64   `json:"min_node_age_ns"`
+	EgressIPVersion      string  `json:"egress_ip_version"`
+	EgressCountryFilters []string
+	ASNFilters           []string
+	IPTypeFilters        []string
+	EgressIPFilters      []string
+}
+
+// PlatformEgressIP is one row of the per-platform egress-IP ledger.
+// P1 exposes it read-only; P2 (verdict state machine) writes it.
+type PlatformEgressIP struct {
+	PlatformID      string `json:"platform_id"`
+	IP              string `json:"ip"`
+	State           string `json:"state"`
+	FailureCount    int    `json:"failure_count"`
+	SuccessStreak   int    `json:"success_streak"`
+	LastResult      string `json:"last_result"`
+	LastProbeAtNs   int64  `json:"last_probe_at_ns"`
+	LastSuccessAtNs int64  `json:"last_success_at_ns"`
+	FirstSeenNs     int64  `json:"first_seen_ns"`
+	LastSeenNs      int64  `json:"last_seen_ns"`
 }
 
 // Subscription represents a node subscription source.

@@ -56,6 +56,15 @@ type NodeEntry struct {
 	LastEgressUpdateAttempt          atomic.Int64
 	LatencyTable                     *LatencyTable // per-domain latency stats; nil if not initialized
 
+	// Probe bookkeeping consumed by platform filters (P1) and the platform
+	// verdict state machine (P2). Written by the platform probe loop only.
+	AliveStreak         atomic.Int32
+	ProbeWindow         *SlidingWindow // 24h success/total counter; nil if not initialized
+	LastProbeSuccess    atomic.Int64   // unix-nano of last PASS (0 = never)
+	LastProbeAttempt    atomic.Int64   // unix-nano of last platform-probe attempt
+	P95LatencyNs        atomic.Int64   // rolling latency P95 across recent samples
+	p95Samples          *LatencyRing  // bounded raw latency samples
+
 	// Outbound instance for this node.
 	Outbound atomic.Pointer[adapter.Outbound]
 }
@@ -73,6 +82,8 @@ func NewNodeEntry(hash Hash, rawOptions json.RawMessage, createdAt time.Time, ma
 	if maxLatencyTableEntries > 0 {
 		e.LatencyTable = NewLatencyTable(maxLatencyTableEntries)
 	}
+	e.ProbeWindow = NewSlidingWindow(DefaultProbeWindowSize)
+	e.p95Samples = NewLatencyRing(DefaultP95SampleSize)
 	return e
 }
 
@@ -178,9 +189,6 @@ func (e *NodeEntry) MatchTagFilter(filter TagFilter, subLookup SubLookupFunc) bo
 
 // HasEnabledSubscription reports whether the node currently has at least one
 // enabled subscription reference, based on subLookup.
-//
-// subLookup must apply the caller's definition of "subscription still holds
-// this node" (for example, excluding evicted managed-node entries).
 func (e *NodeEntry) HasEnabledSubscription(subLookup SubLookupFunc) bool {
 	if e == nil || subLookup == nil {
 		return false
@@ -316,4 +324,40 @@ func (e *NodeEntry) GetLastError() string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.LastError
+}
+
+// --- Platform-probe bookkeeping (P1; written by P2's probe loop) ---
+
+// RecordProbeResult updates the alive streak, the 24h window and the
+// last-success timestamp. Pass lat > 0 to also feed the P95 ring.
+func (e *NodeEntry) RecordProbeResult(pass bool, lat time.Duration, now time.Time) {
+	if e == nil {
+		return
+	}
+	if pass {
+		e.AliveStreak.Add(1)
+		e.LastProbeSuccess.Store(now.UnixNano())
+	} else {
+		e.AliveStreak.Store(0)
+	}
+	e.LastProbeAttempt.Store(now.UnixNano())
+	if e.ProbeWindow != nil {
+		e.ProbeWindow.Record(pass, now)
+	}
+	if pass && lat > 0 && e.p95Samples != nil {
+		e.p95Samples.Add(lat)
+		e.P95LatencyNs.Store(int64(e.p95Samples.P95()))
+	}
+}
+
+// ProbeSuccessRate returns the 24h success ratio. ok=false means "no samples".
+func (e *NodeEntry) ProbeSuccessRate(now time.Time) (float64, bool) {
+	if e == nil || e.ProbeWindow == nil {
+		return 0, false
+	}
+	succ, total := e.ProbeWindow.Stats(now)
+	if total == 0 {
+		return 0, false
+	}
+	return float64(succ) / float64(total), true
 }

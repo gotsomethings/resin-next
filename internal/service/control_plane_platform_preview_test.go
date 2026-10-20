@@ -54,8 +54,10 @@ func buildPreviewFilterFixture(t *testing.T) previewFilterFixture {
 	}
 	hkOutbound := testutil.NewNoopOutbound()
 	hkEntry.Outbound.Store(&hkOutbound)
+	hkEntry.CircuitOpenSince.Store(0)
 	hkEntry.SetEgressIP(netip.MustParseAddr("1.1.1.1"))
 	hkEntry.SetEgressRegion("hk")
+	hkEntry.LatencyTable.LoadEntry("example.com", node.DomainLatencyStats{Ewma: 100 * time.Millisecond, LastUpdated: time.Now()})
 
 	usEntry, ok := pool.GetEntry(usHash)
 	if !ok {
@@ -63,8 +65,10 @@ func buildPreviewFilterFixture(t *testing.T) previewFilterFixture {
 	}
 	usOutbound := testutil.NewNoopOutbound()
 	usEntry.Outbound.Store(&usOutbound)
+	usEntry.CircuitOpenSince.Store(0)
 	usEntry.SetEgressIP(netip.MustParseAddr("2.2.2.2"))
 	usEntry.SetEgressRegion("us")
+	usEntry.LatencyTable.LoadEntry("example.com", node.DomainLatencyStats{Ewma: 120 * time.Millisecond, LastUpdated: time.Now()})
 
 	unknownEntry, ok := pool.GetEntry(unknownHash)
 	if !ok {
@@ -72,7 +76,9 @@ func buildPreviewFilterFixture(t *testing.T) previewFilterFixture {
 	}
 	unknownOutbound := testutil.NewNoopOutbound()
 	unknownEntry.Outbound.Store(&unknownOutbound)
+	unknownEntry.CircuitOpenSince.Store(0)
 	unknownEntry.SetEgressIP(netip.MustParseAddr("3.3.3.3"))
+	unknownEntry.LatencyTable.LoadEntry("example.com", node.DomainLatencyStats{Ewma: 90 * time.Millisecond, LastUpdated: time.Now()})
 
 	cp := &ControlPlaneService{
 		Pool:   pool,

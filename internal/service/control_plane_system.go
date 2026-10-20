@@ -56,6 +56,7 @@ type ControlPlaneService struct {
 	Scheduler       *topology.SubscriptionScheduler
 	Router          *routing.Router
 	GeoIP           *geoip.Service
+	ASN             *geoip.ASNService
 	ProbeMgr        *probe.ProbeManager
 	MatcherRuntime  *proxy.AccountMatcherRuntime
 	RuntimeCfg      *atomic.Pointer[config.RuntimeConfig]
@@ -101,6 +102,20 @@ var platformPatchAllowedFields = map[string]bool{
 	"reverse_proxy_fixed_account_header":   true,
 	"allocation_policy":                    true,
 	"passive_circuit_breaker_disabled":     true,
+
+	// Policy surface (P1).
+	"latency_top_n":           true,
+	"latency_max_ms":          true,
+	"latency_p95_max_ms":      true,
+	"min_alive_streak":        true,
+	"min_probe_success_rate":  true,
+	"max_last_probe_age":      true,
+	"min_node_age":            true,
+	"egress_ip_version":       true,
+	"egress_country_filters":  true,
+	"asn_filters":             true,
+	"ip_type_filters":         true,
+	"egress_ip_filters":       true,
 }
 
 var subscriptionPatchAllowedFields = map[string]bool{

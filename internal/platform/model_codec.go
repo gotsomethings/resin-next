@@ -2,6 +2,7 @@ package platform
 
 import (
 	"fmt"
+	"time"
 	"regexp"
 	"strings"
 
@@ -72,12 +73,34 @@ func NewConfiguredPlatform(
 	allocationPolicy string,
 	passiveCircuitBreakerDisabled bool,
 ) *Platform {
+	return NewConfiguredPlatformWithPolicy(
+		id, name, regexFilters, regionFilters, Policy{},
+		stickyTTLNs, missAction, emptyAccountBehavior, fixedAccountHeader,
+		allocationPolicy, passiveCircuitBreakerDisabled,
+	)
+}
+
+// NewConfiguredPlatformWithPolicy builds a runtime platform including the
+// 11-dimension policy surface.
+func NewConfiguredPlatformWithPolicy(
+	id, name string,
+	regexFilters node.TagFilter,
+	regionFilters []string,
+	policy Policy,
+	stickyTTLNs int64,
+	missAction string,
+	emptyAccountBehavior string,
+	fixedAccountHeader string,
+	allocationPolicy string,
+	passiveCircuitBreakerDisabled bool,
+) *Platform {
 	normalizedFixedHeaders, fixedHeaders, err := NormalizeFixedAccountHeaders(fixedAccountHeader)
 	if err != nil {
 		normalizedFixedHeaders = strings.TrimSpace(fixedAccountHeader)
 		fixedHeaders = nil
 	}
 	plat := NewPlatformWithTagFilter(id, name, regexFilters, regionFilters)
+	plat.Policy = policy
 	plat.StickyTTLNs = stickyTTLNs
 	plat.ReverseProxyMissAction = missAction
 	plat.ReverseProxyEmptyAccountBehavior = emptyAccountBehavior
@@ -97,6 +120,40 @@ func CompileModelRegexFilters(platformID string, regexFilters []string) (node.Ta
 	return compiled, nil
 }
 
+// PolicyFromModel extracts the policy surface from a persisted platform.
+func PolicyFromModel(mp model.Platform) Policy {
+	return Policy{
+		LatencyTopN:          mp.LatencyTopN,
+		LatencyMaxMs:         mp.LatencyMaxMs,
+		LatencyP95MaxMs:      mp.LatencyP95MaxMs,
+		MinAliveStreak:       mp.MinAliveStreak,
+		MinProbeSuccessRate:  mp.MinProbeSuccessRate,
+		MaxLastProbeAge:      time.Duration(mp.MaxLastProbeAgeNs),
+		MinNodeAge:           time.Duration(mp.MinNodeAgeNs),
+		EgressIPVersion:      mp.EgressIPVersion,
+		EgressCountryFilters: append([]string(nil), mp.EgressCountryFilters...),
+		ASNFilters:           append([]string(nil), mp.ASNFilters...),
+		IPTypeFilters:        append([]string(nil), mp.IPTypeFilters...),
+		EgressIPFilters:      append([]string(nil), mp.EgressIPFilters...),
+	}
+}
+
+// ApplyPolicyToModel writes the policy surface back onto a model platform.
+func ApplyPolicyToModel(p Policy, mp *model.Platform) {
+	mp.LatencyTopN = p.LatencyTopN
+	mp.LatencyMaxMs = p.LatencyMaxMs
+	mp.LatencyP95MaxMs = p.LatencyP95MaxMs
+	mp.MinAliveStreak = p.MinAliveStreak
+	mp.MinProbeSuccessRate = p.MinProbeSuccessRate
+	mp.MaxLastProbeAgeNs = int64(p.MaxLastProbeAge)
+	mp.MinNodeAgeNs = int64(p.MinNodeAge)
+	mp.EgressIPVersion = p.EgressIPVersion
+	mp.EgressCountryFilters = append([]string(nil), p.EgressCountryFilters...)
+	mp.ASNFilters = append([]string(nil), p.ASNFilters...)
+	mp.IPTypeFilters = append([]string(nil), p.IPTypeFilters...)
+	mp.EgressIPFilters = append([]string(nil), p.EgressIPFilters...)
+}
+
 // BuildFromModel builds a runtime platform from a persisted model.Platform.
 func BuildFromModel(mp model.Platform) (*Platform, error) {
 	regexFilters, err := CompileModelRegexFilters(mp.ID, mp.RegexFilters)
@@ -105,6 +162,10 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 	}
 	if err := ValidateRegionFilters(mp.RegionFilters); err != nil {
 		return nil, err
+	}
+	policy := PolicyFromModel(mp)
+	if err := Validate(policy); err != nil {
+		return nil, fmt.Errorf("decode platform %s policy: %w", mp.ID, err)
 	}
 	emptyAccountBehavior := mp.ReverseProxyEmptyAccountBehavior
 	if !ReverseProxyEmptyAccountBehavior(emptyAccountBehavior).IsValid() {
@@ -130,11 +191,12 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		)
 	}
 
-	return NewConfiguredPlatform(
+	return NewConfiguredPlatformWithPolicy(
 		mp.ID,
 		mp.Name,
 		regexFilters,
 		append([]string(nil), mp.RegionFilters...),
+		policy,
 		mp.StickyTTLNs,
 		string(missAction),
 		emptyAccountBehavior,
