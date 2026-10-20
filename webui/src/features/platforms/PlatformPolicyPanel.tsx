@@ -102,6 +102,10 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => toForm(platform));
   const [notice, setNotice] = useState<string>("");
+  const [egressState, setEgressState] = useState<"all" | "unknown" | "normal" | "blacklisted">("all");
+  const [egressSort, setEgressSort] = useState<"failure_desc" | "failure_asc" | "probe_desc" | "probe_asc" | "ip_asc">(
+    "failure_desc",
+  );
 
   useEffect(() => {
     setForm(toForm(platform));
@@ -165,6 +169,24 @@ export function PlatformPolicyPanel({ platform }: Props) {
     const n = Number.parseFloat(v);
     return Number.isFinite(n) ? n : 0;
   };
+  const allEgressRows: EgressIPRow[] = egressQuery.data?.items ?? [];
+  const visibleEgressRows = allEgressRows
+    .filter((row) => egressState === "all" || (row.state || "unknown") === egressState)
+    .slice()
+    .sort((a, b) => {
+      switch (egressSort) {
+        case "failure_asc":
+          return a.failure_count - b.failure_count || a.ip.localeCompare(b.ip);
+        case "probe_asc":
+          return (a.last_probe_at || "").localeCompare(b.last_probe_at || "") || a.ip.localeCompare(b.ip);
+        case "probe_desc":
+          return (b.last_probe_at || "").localeCompare(a.last_probe_at || "") || a.ip.localeCompare(b.ip);
+        case "ip_asc":
+          return a.ip.localeCompare(b.ip);
+        default:
+          return b.failure_count - a.failure_count || a.ip.localeCompare(b.ip);
+      }
+    });
 
   return (
     <Card className="platform-policy-panel">
@@ -346,6 +368,30 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
       <section className="policy-section">
         <h4>{t("出口 IP 台账")}</h4>
+        <div className="policy-toolbar">
+          <label className="field">
+            <span>{t("状态")}</span>
+            <select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
+              <option value="all">{t("全部")}</option>
+              <option value="unknown">unknown</option>
+              <option value="normal">normal</option>
+              <option value="blacklisted">blacklisted</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{t("排序")}</span>
+            <select value={egressSort} onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}>
+              <option value="failure_desc">{t("连续失败 ↓")}</option>
+              <option value="failure_asc">{t("连续失败 ↑")}</option>
+              <option value="probe_desc">{t("最近探测时间 ↓")}</option>
+              <option value="probe_asc">{t("最近探测时间 ↑")}</option>
+              <option value="ip_asc">{t("IP 字典序")}</option>
+            </select>
+          </label>
+          <span className="muted">
+            {visibleEgressRows.length} / {allEgressRows.length}
+          </span>
+        </div>
         {egressQuery.isLoading ? <p className="muted">{t("加载中...")}</p> : null}
         {egressQuery.isError ? (
           <p className="muted">{formatApiErrorMessage(egressQuery.error, t)}</p>
@@ -353,7 +399,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
         {!egressQuery.isLoading && !egressQuery.isError && !(egressQuery.data?.items ?? []).length ? (
           <p className="muted">{t("暂无台账数据")}</p>
         ) : null}
-        {(egressQuery.data?.items ?? []).length ? (
+        {visibleEgressRows.length ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -368,7 +414,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {(egressQuery.data?.items ?? []).map((row: EgressIPRow) => (
+                {visibleEgressRows.map((row: EgressIPRow) => (
                   <tr key={row.ip}>
                     <td>{row.ip}</td>
                     <td>
