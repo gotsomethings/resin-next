@@ -452,6 +452,14 @@ func (r *StateRepo) UpsertPlatformEgressIP(e model.PlatformEgressIP) error {
 	return err
 }
 
+// DeletePlatformEgressIP removes one ledger row.
+func (r *StateRepo) DeletePlatformEgressIP(platformID, ip string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, err := r.db.Exec(`DELETE FROM platform_egress_ips WHERE platform_id = ? AND ip = ?`, platformID, ip)
+	return err
+}
+
 // GCPlatformEgressIPs removes ledger rows not seen since olderThanNs.
 func (r *StateRepo) GCPlatformEgressIPs(olderThanNs int64) (int64, error) {
 	r.mu.Lock()

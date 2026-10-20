@@ -452,7 +452,23 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 			if a.verdicts == nil {
 				return
 			}
-			if n, err := a.verdicts.GC(time.Now().Add(-30 * 24 * time.Hour)); err != nil {
+			retention := 72 * time.Hour
+			if a.runtimeCfg != nil {
+				if cur := a.runtimeCfg.Load(); cur != nil && time.Duration(cur.VerdictGCRetention) > 0 {
+					retention = time.Duration(cur.VerdictGCRetention)
+				}
+			}
+			live := make(map[string]struct{})
+			a.topoRuntime.pool.Range(func(_ node.Hash, e *node.NodeEntry) bool {
+				if ip := e.GetEgressIP(); ip.IsValid() {
+					live[ip.String()] = struct{}{}
+				}
+				return true
+			})
+			if n, err := a.verdicts.GC(time.Now().Add(-retention), func(_, ip string) bool {
+				_, ok := live[ip]
+				return ok
+			}); err != nil {
 				log.Printf("verdict GC: %v", err)
 			} else if n > 0 {
 				log.Printf("verdict GC: removed %d stale egress IP rows", n)

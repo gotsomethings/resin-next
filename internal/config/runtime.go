@@ -37,6 +37,10 @@ type RuntimeConfig struct {
 	ProbeConcurrencySettings int    `json:"probe_concurrency"`
 	ProbeConcurrencyMode     string `json:"probe_concurrency_mode"`
 	ProbeConcurrencyEffective int   `json:"probe_concurrency_effective"`
+
+	// Verdict ledger retention (P2/P3). Rows whose egress IP has not been seen
+	// on any node for this long are deleted by the governor loop.
+	VerdictGCRetention Duration `json:"verdict_gc_retention"`
 }
 
 // NewDefaultRuntimeConfig returns a RuntimeConfig populated with the default
@@ -67,5 +71,6 @@ func NewDefaultRuntimeConfig() *RuntimeConfig {
 		ProbeConcurrencySettings:  1000,
 		ProbeConcurrencyMode:      "fixed",
 		ProbeConcurrencyEffective: 1000,
+		VerdictGCRetention:        Duration(72 * time.Hour),
 	}
 }

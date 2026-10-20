@@ -27,6 +27,8 @@ type GovernorConfig struct {
 	Interval time.Duration
 	OnAdjust func(effective int, reason string, at time.Time)
 	GC       func()
+	// GCInterval is how often GC runs (default 6h). The retention window
+	// itself lives in RuntimeConfig.VerdictGCRetention (default 72h).
 	GCInterval time.Duration
 	Now      func() time.Time
 }

@@ -184,30 +184,40 @@ func (v *VerdictStore) Snapshot(platformID string) []model.PlatformEgressIP {
 	return out
 }
 
-// GC removes ledger rows not seen since cutoff.
-func (v *VerdictStore) GC(cutoff time.Time) (int64, error) {
+// GC removes ledger rows whose egress IP has not been seen for the retention
+// window and is no longer present on any node. live reports current presence.
+func (v *VerdictStore) GC(cutoff time.Time, live func(platformID, ip string) bool) (int64, error) {
 	if v == nil {
 		return 0, nil
 	}
 	cut := cutoff.UnixNano()
+	type rowKey struct{ pid, ip string }
+	var removedKeys []rowKey
+
 	v.mu.Lock()
-	var removed int64
 	for pid, m := range v.byPlatform {
 		for ip, e := range m {
-			if e.LastSeenNs > 0 && e.LastSeenNs < cut {
-				delete(m, ip)
-				removed++
+			if e.LastSeenNs <= 0 || e.LastSeenNs >= cut {
+				continue
 			}
+			if live != nil && live(pid, ip) {
+				continue
+			}
+			delete(m, ip)
+			removedKeys = append(removedKeys, rowKey{pid: pid, ip: ip})
 		}
 		if len(m) == 0 {
 			delete(v.byPlatform, pid)
 		}
 	}
 	v.mu.Unlock()
+
 	if v.repo != nil {
-		if _, err := v.repo.GCPlatformEgressIPs(cut); err != nil {
-			return removed, err
+		for _, k := range removedKeys {
+			if err := v.repo.DeletePlatformEgressIP(k.pid, k.ip); err != nil {
+				return int64(len(removedKeys)), err
+			}
 		}
 	}
-	return removed, nil
+	return int64(len(removedKeys)), nil
 }

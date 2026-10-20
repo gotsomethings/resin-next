@@ -96,6 +96,7 @@ var runtimeConfigAllowedFields = map[string]bool{
 	"probe_concurrency_mode":                   true,
 	// Read-only echo of the governor's live value; accepted but overwritten.
 	"probe_concurrency_effective":              true,
+	"verdict_gc_retention":                     true,
 }
 
 var platformPatchAllowedFields = map[string]bool{
@@ -262,6 +263,9 @@ func validateRuntimeConfig(cfg *config.RuntimeConfig) *ServiceError {
 	case "fixed", "auto":
 	default:
 		return invalidArg("probe_concurrency_mode: must be fixed or auto")
+	}
+	if cfg.VerdictGCRetention < config.Duration(time.Hour) || cfg.VerdictGCRetention > config.Duration(720*time.Hour) {
+		return invalidArg("verdict_gc_retention: must be between 1h and 720h")
 	}
 	// Request log bytes fields must be non-negative.
 	if cfg.ReverseProxyLogReqHeadersMaxBytes < 0 {
