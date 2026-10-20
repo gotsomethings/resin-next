@@ -306,7 +306,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           <Input value={String(form.min_alive_streak)} onChange={(e) => setForm({ ...form, min_alive_streak: num(e.target.value) })} />
         </label>
         <label className="field">
-          <span>{t("24h 成功率下限（0–1）")}</span>
+          <span>{t("近 24 小时探测通过率（按小时桶滚动，无样本时不限制）")}</span>
           <Input value={String(form.min_probe_success_rate)} onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })} />
         </label>
         <label className="field">

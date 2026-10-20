@@ -90,3 +90,33 @@ func TestFilter_MinAliveStreakResetsOnFailure(t *testing.T) {
 		t.Fatal("a failure must reset the streak and filter the node")
 	}
 }
+
+// One success gives rate 1.0 and must pass a 1.0 threshold; a later failure
+// drops it to 0.5 and must filter.
+func TestFilter_MinProbeSuccessRateSingleSuccess(t *testing.T) {
+	p := NewPlatform("p-rate2", "Rate2", nil, nil)
+	p.Policy = Policy{MinProbeSuccessRate: 1.0}
+
+	h := makeHash(`{"type":"ss","server":"7.7.7.4","port":443}`)
+	entry := makeFullyRoutableEntry(h, "sub1")
+
+	// No samples -> dimension does not apply.
+	rebuildOne(t, p, h, entry)
+	if p.View().Size() != 1 {
+		t.Fatalf("no samples must pass, got size %d", p.View().Size())
+	}
+
+	// One success -> 1/1 = 1.0 -> passes a 1.0 threshold.
+	entry.RecordProbeResult(true, 10*time.Millisecond, time.Now())
+	rebuildOne(t, p, h, entry)
+	if p.View().Size() != 1 {
+		t.Fatalf("rate 1.0 must pass threshold 1.0, got size %d", p.View().Size())
+	}
+
+	// One failure -> 1/2 = 0.5 -> filtered.
+	entry.RecordProbeResult(false, 0, time.Now())
+	rebuildOne(t, p, h, entry)
+	if p.View().Size() != 0 {
+		t.Fatalf("rate 0.5 must fail threshold 1.0, got size %d", p.View().Size())
+	}
+}
