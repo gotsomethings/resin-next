@@ -342,9 +342,11 @@ func (m *ProbeManager) SetSettingsConcurrency(n int) {
 	m.clampEffective(cur)
 }
 
-// SetEffectiveConcurrency pins the live dispatch limit (clamped to the ceiling).
-func (m *ProbeManager) SetEffectiveConcurrency(n int) {
+// SetEffectiveConcurrency pins the live dispatch limit, clamped to
+// [1, settings], and returns the value actually in force.
+func (m *ProbeManager) SetEffectiveConcurrency(n int) int {
 	m.clampEffective(n)
+	return m.EffectiveConcurrency()
 }
 
 // acquireSlot reserves one dispatch slot with a CAS loop, guaranteeing that

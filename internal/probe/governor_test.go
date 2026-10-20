@@ -172,3 +172,26 @@ func TestProbeManager_AcquireSlotRespectsLimit(t *testing.T) {
 		t.Fatal("slot must be reusable after release")
 	}
 }
+
+// tight -> relaxed -> tight inside one minute must step down only once.
+func TestGovernor_JitterDoesNotDoubleStep(t *testing.T) {
+	m := newTestManager(1000)
+	g := NewGovernor(GovernorConfig{Manager: m})
+
+	base := time.Now()
+	g.Step(base, tightSample())
+	if got := m.EffectiveConcurrency(); got != 700 {
+		t.Fatalf("first tight = %d, want 700", got)
+	}
+
+	g.Step(base.Add(10*time.Second), relaxedSample())
+	g.Step(base.Add(20*time.Second), tightSample())
+	if got := m.EffectiveConcurrency(); got != 700 {
+		t.Fatalf("second tight inside the minute = %d, want 700 (gate must hold)", got)
+	}
+
+	g.Step(base.Add(61*time.Second), tightSample())
+	if got := m.EffectiveConcurrency(); got != 490 {
+		t.Fatalf("tight after the gate = %d, want 490", got)
+	}
+}

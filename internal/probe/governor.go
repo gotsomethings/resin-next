@@ -13,11 +13,12 @@ import (
 // ResourceSample is one governance observation. Ratios are 0..1; a zero value
 // means "unknown" and is ignored by the pressure checks.
 const (
-	// pacingSamples is how many 30s samples make one adjustment window (60s).
-	pacingSamples = 2
 	// relaxSamples is how many consecutive relaxed samples are required before
 	// stepping back up.
 	relaxSamples = 3
+	// adjustGate is the minimum wall-clock gap between two adjustments, so a
+	// tight sample cannot double-step within the same minute.
+	adjustGate = time.Minute
 )
 
 type ResourceSample struct {
@@ -50,7 +51,6 @@ type Governor struct {
 
 	lastAdjust time.Time
 	relaxRun   int
-	sinceAdj   int // samples since the last adjustment (pacing without wall-clock drift)
 }
 
 // NewGovernor creates a Governor.
@@ -129,19 +129,17 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 
 	if tight {
 		g.relaxRun = 0
-		g.sinceAdj++
-		// Single tight sample steps down immediately; sustained pressure then
-		// steps down once per pacing window (2 samples = 60s at the 30s interval).
-		if g.sinceAdj >= 1 && (g.lastAdjust.IsZero() || g.sinceAdj >= pacingSamples) {
+		// Single tight sample steps down immediately; adjustGate only prevents a
+		// second step inside the same minute.
+		if g.lastAdjust.IsZero() || now.Sub(g.lastAdjust) >= adjustGate {
 			next := effective * 7 / 10
 			if next < floor {
 				next = floor
 			}
 			if next < effective {
-				m.SetEffectiveConcurrency(next)
+				actual := m.SetEffectiveConcurrency(next)
 				g.lastAdjust = now
-				g.sinceAdj = 0
-				g.report(next, reason, now)
+				g.report(actual, reason, now)
 			}
 		}
 		return
@@ -149,16 +147,15 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 
 	if relaxed {
 		g.relaxRun++
-		g.sinceAdj++
-		if g.relaxRun >= relaxSamples && effective < settings && g.sinceAdj >= pacingSamples {
+		if g.relaxRun >= relaxSamples && effective < settings &&
+			(g.lastAdjust.IsZero() || now.Sub(g.lastAdjust) >= adjustGate) {
 			next := effective + settings*3/10
 			if next > settings {
 				next = settings
 			}
-			m.SetEffectiveConcurrency(next)
+			actual := m.SetEffectiveConcurrency(next)
 			g.lastAdjust = now
-			g.sinceAdj = 0
-			g.report(next, "pressure released", now)
+			g.report(actual, "pressure released", now)
 		}
 		return
 	}
