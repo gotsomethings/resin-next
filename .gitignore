@@ -9,3 +9,6 @@ start-instance.sh
 .claude/
 .omc/
 .local/
+\
+# local refactor helper scripts
+p*_*.py\
