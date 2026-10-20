@@ -59,6 +59,11 @@ type ProbeManager struct {
 	wg          sync.WaitGroup
 	fetcher     Fetcher
 	workerCount int
+
+	// Dynamic dispatch limit (P3). Workers are pre-created up to workerCount;
+	// the governor lowers effectiveConcurrency without restarting anything.
+	settingsConcurrency  atomic.Int32
+	effectiveConcurrency atomic.Int32
 	taskQueue   *probeTaskQueue
 	taskStates  *xsync.Map[probeTaskKey, *probeTaskState]
 
@@ -75,6 +80,9 @@ const (
 	egressTraceDomain     = "cloudflare.com"
 	defaultLatencyTestURL = "https://www.gstatic.com/generate_204"
 	defaultQueueCap       = 1024
+
+	// throttleSleep is how long a worker waits when the live limit is reached.
+	throttleSleep = 25 * time.Millisecond
 )
 
 type probePriority uint8
@@ -199,6 +207,24 @@ func (q *probeTaskQueue) Enqueue(task probeTask, priority probePriority) bool {
 	return true
 }
 
+// PushFront puts a throttled task back at the head of its priority lane.
+func (q *probeTaskQueue) PushFront(task probeTask, priority probePriority) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopped {
+		return
+	}
+	switch priority {
+	case probePriorityHigh:
+		q.high.items = append([]probeTask{task}, q.high.items[q.high.head:]...)
+		q.high.head = 0
+	default:
+		q.normal.items = append([]probeTask{task}, q.normal.items[q.normal.head:]...)
+		q.normal.head = 0
+	}
+	q.notEmpty.Signal()
+}
+
 func (q *probeTaskQueue) Dequeue() (probeTask, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -257,7 +283,7 @@ func NewProbeManager(cfg ProbeConfig) *ProbeManager {
 		}
 	}
 
-	return &ProbeManager{
+	m := &ProbeManager{
 		pool:                            cfg.Pool,
 		stopCh:                          make(chan struct{}),
 		fetcher:                         cfg.Fetcher,
@@ -271,11 +297,50 @@ func NewProbeManager(cfg ProbeConfig) *ProbeManager {
 		latencyAuthorities:              cfg.LatencyAuthorities,
 		onProbeEvent:                    cfg.OnProbeEvent,
 	}
+	m.settingsConcurrency.Store(int32(conc))
+	m.effectiveConcurrency.Store(int32(conc))
+	return m
 }
 
 // SetOnProbeEvent sets the probe event callback. Must be called before Start.
 func (m *ProbeManager) SetOnProbeEvent(fn func(kind string)) {
 	m.onProbeEvent = fn
+}
+
+// SettingsConcurrency is the configured ceiling.
+func (m *ProbeManager) SettingsConcurrency() int {
+	return int(m.settingsConcurrency.Load())
+}
+
+// EffectiveConcurrency is the currently enforced dispatch limit.
+func (m *ProbeManager) EffectiveConcurrency() int {
+	return int(m.effectiveConcurrency.Load())
+}
+
+// SetSettingsConcurrency updates the configured ceiling (hot, no restart).
+func (m *ProbeManager) SetSettingsConcurrency(n int) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 10000 {
+		n = 10000
+	}
+	prev := int(m.settingsConcurrency.Swap(int32(n)))
+	if m.effectiveConcurrency.Load() >= int32(prev) || m.effectiveConcurrency.Load() < 1 {
+		m.effectiveConcurrency.Store(int32(n))
+	}
+}
+
+// SetEffectiveConcurrency pins the live dispatch limit.
+func (m *ProbeManager) SetEffectiveConcurrency(n int) {
+	settings := int(m.settingsConcurrency.Load())
+	if n < 1 {
+		n = 1
+	}
+	if settings > 0 && n > settings {
+		n = settings
+	}
+	m.effectiveConcurrency.Store(int32(n))
 }
 
 // Start launches the background probe workers.
@@ -520,6 +585,18 @@ func (m *ProbeManager) runProbeWorker() {
 		task, ok := m.taskQueue.Dequeue()
 		if !ok {
 			return
+		}
+
+		// Dynamic throttling: park the task at the front of its lane while the
+		// live limit is saturated.
+		if int(m.effectiveConcurrency.Load()) <= m.runningCount() {
+			m.taskQueue.PushFront(task, probePriorityNormal)
+			select {
+			case <-m.stopCh:
+				return
+			case <-time.After(throttleSleep):
+			}
+			continue
 		}
 
 		state, ok := m.markTaskRunning(task.key)
@@ -823,4 +900,15 @@ func (m *ProbeManager) currentLatencyTestURL() string {
 		testURL = m.latencyTestURL()
 	}
 	return testURL
+}
+
+func (m *ProbeManager) runningCount() int {
+	count := 0
+	m.taskStates.Range(func(_ probeTaskKey, st *probeTaskState) bool {
+		if st.flags.Load()&taskFlagRunning != 0 {
+			count++
+		}
+		return true
+	})
+	return count
 }

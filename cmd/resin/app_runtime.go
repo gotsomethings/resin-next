@@ -45,6 +45,7 @@ type resinApp struct {
 	transportPool   *proxy.OutboundTransportPool
 	platformProbe   *probe.PlatformProbe
 	verdicts        *service.VerdictStore
+	governor        *probe.Governor
 }
 
 func run() error {
@@ -435,6 +436,33 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 	a.platformProbe = platformProbe
 	log.Println("Platform probe started")
 
+	governor := probe.NewGovernor(probe.GovernorConfig{
+		Manager: a.topoRuntime.probeMgr,
+		OnAdjust: func(effective int, reason string, at time.Time) {
+			if a.runtimeCfg == nil {
+				return
+			}
+			if cur := a.runtimeCfg.Load(); cur != nil {
+				next := *cur
+				next.ProbeConcurrencyEffective = effective
+				a.runtimeCfg.Store(&next)
+			}
+		},
+		GC: func() {
+			if a.verdicts == nil {
+				return
+			}
+			if n, err := a.verdicts.GC(time.Now().Add(-30 * 24 * time.Hour)); err != nil {
+				log.Printf("verdict GC: %v", err)
+			} else if n > 0 {
+				log.Printf("verdict GC: removed %d stale egress IP rows", n)
+			}
+		},
+	})
+	governor.Start()
+	a.governor = governor
+	log.Println("Probe concurrency governor started")
+
 	apiSrv := api.NewServerWithAddress(
 		a.envCfg.ListenAddress,
 		a.envCfg.ResinPort,
@@ -618,6 +646,10 @@ func (a *resinApp) shutdown(ctx context.Context) {
 	a.topoRuntime.scheduler.Stop()
 	log.Println("Subscription scheduler stopped")
 
+	if a.governor != nil {
+		a.governor.Stop()
+		log.Println("Probe concurrency governor stopped")
+	}
 	if a.platformProbe != nil {
 		a.platformProbe.Stop()
 		log.Println("Platform probe stopped")

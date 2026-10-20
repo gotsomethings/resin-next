@@ -30,6 +30,13 @@ type RuntimeConfig struct {
 	// Persistence
 	CacheFlushInterval       Duration `json:"cache_flush_interval"`
 	CacheFlushDirtyThreshold int      `json:"cache_flush_dirty_threshold"`
+
+	// Probe concurrency governance (P3).
+	// SettingsConcurrency is the configured ceiling; only the governor moves
+	// EffectiveConcurrency, and it never drops below SettingsConcurrency/10.
+	ProbeConcurrencySettings int    `json:"probe_concurrency"`
+	ProbeConcurrencyMode     string `json:"probe_concurrency_mode"`
+	ProbeConcurrencyEffective int   `json:"probe_concurrency_effective"`
 }
 
 // NewDefaultRuntimeConfig returns a RuntimeConfig populated with the default
@@ -56,5 +63,9 @@ func NewDefaultRuntimeConfig() *RuntimeConfig {
 
 		CacheFlushInterval:       Duration(5 * time.Minute),
 		CacheFlushDirtyThreshold: 1000,
+
+		ProbeConcurrencySettings:  1000,
+		ProbeConcurrencyMode:      "fixed",
+		ProbeConcurrencyEffective: 1000,
 	}
 }

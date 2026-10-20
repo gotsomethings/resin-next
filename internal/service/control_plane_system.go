@@ -92,6 +92,10 @@ var runtimeConfigAllowedFields = map[string]bool{
 	"latency_decay_window":                     true,
 	"cache_flush_interval":                     true,
 	"cache_flush_dirty_threshold":              true,
+	"probe_concurrency":                        true,
+	"probe_concurrency_mode":                   true,
+	// Read-only echo of the governor's live value; accepted but overwritten.
+	"probe_concurrency_effective":              true,
 }
 
 var platformPatchAllowedFields = map[string]bool{
@@ -196,6 +200,11 @@ func (s *ControlPlaneService) PatchRuntimeConfig(patchJSON json.RawMessage) (*co
 		return nil, verr
 	}
 
+	// probe_concurrency_effective is a read-only echo: never trust the body.
+	if s.ProbeMgr != nil {
+		newCfg.ProbeConcurrencyEffective = s.ProbeMgr.EffectiveConcurrency()
+	}
+
 	// 4. Additional validation.
 	if err := validateRuntimeConfig(newCfg); err != nil {
 		return nil, err
@@ -223,6 +232,15 @@ func (s *ControlPlaneService) PatchRuntimeConfig(patchJSON json.RawMessage) (*co
 	s.RuntimeCfg.Store(newCfg)
 	s.configVersion = newVersion
 
+	// 7. Hot-apply concurrency settings (fixed mode takes effect immediately;
+	//    auto mode lets the governor converge from the new ceiling).
+	if s.ProbeMgr != nil {
+		s.ProbeMgr.SetSettingsConcurrency(newCfg.ProbeConcurrencySettings)
+		if newCfg.ProbeConcurrencyMode == "fixed" {
+			s.ProbeMgr.SetEffectiveConcurrency(newCfg.ProbeConcurrencySettings)
+		}
+	}
+
 	return newCfg, nil
 }
 
@@ -238,6 +256,14 @@ func validateRuntimeConfig(cfg *config.RuntimeConfig) *ServiceError {
 	}
 	if cfg.CacheFlushDirtyThreshold < 0 {
 		return invalidArg("cache_flush_dirty_threshold: must be non-negative")
+	}
+	if cfg.ProbeConcurrencySettings < 1 || cfg.ProbeConcurrencySettings > 10000 {
+		return invalidArg("probe_concurrency: must be between 1 and 10000")
+	}
+	switch cfg.ProbeConcurrencyMode {
+	case "fixed", "auto":
+	default:
+		return invalidArg("probe_concurrency_mode: must be fixed or auto")
 	}
 	// Request log bytes fields must be non-negative.
 	if cfg.ReverseProxyLogReqHeadersMaxBytes < 0 {
