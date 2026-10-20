@@ -163,7 +163,7 @@ func tryFailoverConnect(
 		if ctx.Err() != nil {
 			break
 		}
-		route, err := deps.router.RebindLease(platformName, account, exclude)
+		route, err := deps.router.RebindLease(platformName, account, target, exclude)
 		if err != nil {
 			break
 		}

@@ -3,6 +3,7 @@ package routing
 import (
 	"time"
 
+	"github.com/Resinat/Resin/internal/netutil"
 	"github.com/Resinat/Resin/internal/node"
 	"github.com/Resinat/Resin/internal/platform"
 	"github.com/puzpuzpuz/xsync/v4"
@@ -15,7 +16,7 @@ func (r *Router) PlatformByID(id string) (*platform.Platform, bool) {
 
 // RebindLease picks a live routable node other than failedHash and re-pins the
 // account's sticky lease to it. Used by connect-stage failover (P4).
-func (r *Router) RebindLease(platName, account string, failedHash node.Hash) (RouteResult, error) {
+func (r *Router) RebindLease(platName, account, target string, failedHash node.Hash) (RouteResult, error) {
 	plat, err := r.resolvePlatform(platName)
 	if err != nil {
 		return RouteResult{}, err
@@ -35,7 +36,7 @@ func (r *Router) RebindLease(platName, account string, failedHash node.Hash) (Ro
 		plat,
 		state.IPLoadStats,
 		r.pool,
-		"",
+		netutil.ExtractDomain(target),
 		authorities,
 		p2cWindow,
 		failedHash,

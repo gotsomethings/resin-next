@@ -77,7 +77,7 @@ func TestRebindLease_PrefersLowLatency(t *testing.T) {
 	fx := newRebindFixture(t, platform.AllocationPolicyPreferLowLatency, 50*time.Millisecond, 500*time.Millisecond)
 
 	// Exclude the third node so only the 50ms/500ms pair remains.
-	res, err := fx.router.RebindLease("P1", "acct", fx.hC)
+	res, err := fx.router.RebindLease("P1", "acct", "example.com", fx.hC)
 	if err != nil {
 		t.Fatalf("RebindLease: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRebindLease_RespectsIPLoadBalancing(t *testing.T) {
 	}
 
 	// Exclude the third node; candidates are A (loaded) and B (idle).
-	res, err := fx.router.RebindLease("P1", "acct", fx.hC)
+	res, err := fx.router.RebindLease("P1", "acct", "example.com", fx.hC)
 	if err != nil {
 		t.Fatalf("RebindLease: %v", err)
 	}
@@ -110,12 +110,77 @@ func TestRebindLease_ExcludesFailedNode(t *testing.T) {
 	fx := newRebindFixture(t, platform.AllocationPolicyBalanced, 100*time.Millisecond, 100*time.Millisecond)
 
 	for i := 0; i < 50; i++ {
-		res, err := fx.router.RebindLease("P1", "acct", fx.hA)
+		res, err := fx.router.RebindLease("P1", "acct", "example.com", fx.hA)
 		if err != nil {
 			t.Fatalf("iteration %d: %v", i, err)
 		}
 		if res.NodeHash == fx.hA {
 			t.Fatalf("iteration %d: returned the failed node %s", i, fx.hA.Hex())
+		}
+	}
+}
+
+// RebindLease must pass the real target through so P2C can use the target
+// domain's own latency instead of falling back to authority averages.
+func TestRebindLease_UsesTargetDomainLatency(t *testing.T) {
+	subMgr := topology.NewSubscriptionManager()
+	sub := subscription.NewSubscription("sub-t", "sub-t", "https://example.com/sub", true, false)
+	subMgr.Register(sub)
+
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 16,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	mk := func(tag, ip string, targetLatency, authorityLatency time.Duration) node.Hash {
+		raw := []byte(`{"type":"ss","server":"` + ip + `","port":443}`)
+		h := node.HashFromRawOptions(raw)
+		pool.AddNodeFromSub(h, raw, sub.ID)
+		sub.ManagedNodes().StoreNode(h, subscription.ManagedNode{Tags: []string{tag}})
+		e, _ := pool.GetEntry(h)
+		ob := testutil.NewNoopOutbound()
+		e.Outbound.Store(&ob)
+		e.CircuitOpenSince.Store(0)
+		e.SetEgressIP(netip.MustParseAddr(ip))
+		e.LatencyTable.LoadEntry("target.example", node.DomainLatencyStats{Ewma: targetLatency, LastUpdated: time.Now()})
+		e.LatencyTable.LoadEntry("authority.example", node.DomainLatencyStats{Ewma: authorityLatency, LastUpdated: time.Now()})
+		return h
+	}
+
+	// A: fast on the target domain, slow on the authority. B: the opposite.
+	hA := mk("a", "10.30.0.1", 50*time.Millisecond, 900*time.Millisecond)
+	hB := mk("b", "10.30.0.2", 500*time.Millisecond, 10*time.Millisecond)
+
+	plat := platform.NewPlatform("pt", "PT", nil, nil)
+	plat.StickyTTLNs = int64(time.Hour)
+	plat.AllocationPolicy = platform.AllocationPolicyPreferLowLatency
+	poolRange := func(fn func(node.Hash, *node.NodeEntry) bool) { pool.Range(fn) }
+	plat.FullRebuild(poolRange, pool.MakeSubLookup(), func(netip.Addr) string { return "us" })
+	pool.RegisterPlatform(plat)
+	if !plat.View().Contains(hA) || !plat.View().Contains(hB) {
+		t.Fatal("setup: both latency candidates must be routable")
+	}
+
+	router := NewRouter(RouterConfig{
+		Pool:        pool,
+		Authorities: func() []string { return []string{"authority.example"} },
+		P2CWindow:   func() time.Duration { return time.Hour },
+	})
+
+	// The failed node is a third one so both candidates stay in play.
+	failed := mk("c", "10.30.0.3", time.Second, time.Second)
+
+	for i := 0; i < 20; i++ {
+		res, err := router.RebindLease("PT", "acct", "target.example", failed)
+		if err != nil {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		if res.NodeHash != hA {
+			t.Fatalf("iteration %d: picked %s, want the target-domain-fast node %s",
+				i, res.NodeHash.Hex(), hA.Hex())
 		}
 	}
 }
