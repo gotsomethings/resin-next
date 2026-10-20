@@ -36,7 +36,9 @@ type RuntimeConfig struct {
 	// EffectiveConcurrency, and it never drops below SettingsConcurrency/10.
 	ProbeConcurrencySettings int    `json:"probe_concurrency"`
 	ProbeConcurrencyMode     string `json:"probe_concurrency_mode"`
-	ProbeConcurrencyEffective int   `json:"probe_concurrency_effective"`
+	ProbeConcurrencyEffective int    `json:"probe_concurrency_effective"`
+	ProbeConcurrencyReason    string `json:"probe_concurrency_reason"`
+	ProbeConcurrencyAdjustedAt string `json:"probe_concurrency_adjusted_at"`
 
 	// Verdict ledger retention (P2/P3). Rows whose egress IP has not been seen
 	// on any node for this long are deleted by the governor loop.

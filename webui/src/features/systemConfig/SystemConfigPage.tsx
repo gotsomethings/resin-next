@@ -12,6 +12,7 @@ import { useToast } from "../../hooks/useToast";
 import i18next, { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { getEnvConfig, patchSystemConfig, getSystemConfig, getDefaultSystemConfig } from "./api";
+import { ConcurrencyPanel } from "./ConcurrencyPanel";
 import type { RuntimeConfig, RuntimeConfigPatch } from "./types";
 
 type RuntimeConfigForm = {
@@ -31,7 +32,12 @@ type RuntimeConfigForm = {
   latency_decay_window: string;
   cache_flush_interval: string;
   cache_flush_dirty_threshold: string;
-};
+  probe_concurrency: string;
+  probe_concurrency_mode: string;
+  probe_concurrency_effective: string;
+  probe_concurrency_reason: string;
+  probe_concurrency_adjusted_at: string;
+  verdict_gc_retention: string;};
 
 const EDITABLE_FIELDS: Array<keyof RuntimeConfig> = [
   "request_log_enabled",
@@ -69,6 +75,12 @@ const FIELD_LABELS: Record<keyof RuntimeConfig, string> = {
   latency_decay_window: "历史延迟衰减窗口",
   cache_flush_interval: "缓存异步刷盘间隔",
   cache_flush_dirty_threshold: "缓存刷盘脏阈值",
+  probe_concurrency: "探测并发设定值",
+  probe_concurrency_mode: "并发模式（fixed/auto）",
+  probe_concurrency_effective: "当前生效并发（只读）",
+  probe_concurrency_reason: "最近调整原因（只读）",
+  probe_concurrency_adjusted_at: "最近调整时间（只读）",
+  verdict_gc_retention: "台账保留期",
 };
 
 const ALLOCATION_POLICY_LABELS: Record<string, string> = {
@@ -106,6 +118,12 @@ function configToForm(config: RuntimeConfig): RuntimeConfigForm {
     latency_decay_window: config.latency_decay_window,
     cache_flush_interval: config.cache_flush_interval,
     cache_flush_dirty_threshold: String(config.cache_flush_dirty_threshold),
+    probe_concurrency: String(config.probe_concurrency),
+    probe_concurrency_mode: config.probe_concurrency_mode,
+    probe_concurrency_effective: String(config.probe_concurrency_effective),
+    probe_concurrency_reason: config.probe_concurrency_reason,
+    probe_concurrency_adjusted_at: config.probe_concurrency_adjusted_at,
+    verdict_gc_retention: config.verdict_gc_retention,
   };
 }
 
@@ -179,6 +197,12 @@ function parseForm(form: RuntimeConfigForm): RuntimeConfig {
     p2c_latency_window: parseDurationField("P2C 延迟衰减窗口", form.p2c_latency_window),
     latency_decay_window: parseDurationField("历史延迟衰减窗口", form.latency_decay_window),
     cache_flush_interval: parseDurationField("缓存异步刷盘间隔", form.cache_flush_interval),
+    probe_concurrency: parseNonNegativeInt("探测并发设定值", form.probe_concurrency),
+    probe_concurrency_mode: form.probe_concurrency_mode === "auto" ? "auto" : "fixed",
+    probe_concurrency_effective: parseNonNegativeInt("当前生效并发", form.probe_concurrency_effective),
+    probe_concurrency_reason: form.probe_concurrency_reason,
+    probe_concurrency_adjusted_at: form.probe_concurrency_adjusted_at,
+    verdict_gc_retention: form.verdict_gc_retention,
     cache_flush_dirty_threshold: parseNonNegativeInt("缓存刷盘脏阈值", form.cache_flush_dirty_threshold),
   };
 }
@@ -425,6 +449,8 @@ export function SystemConfigPage() {
       </header>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      <ConcurrencyPanel />
 
       {!form ? (
         <Card className="syscfg-form-card platform-directory-card">

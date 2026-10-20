@@ -20,6 +20,12 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   latency_decay_window: "",
   cache_flush_interval: "",
   cache_flush_dirty_threshold: 0,
+  probe_concurrency: 0,
+  probe_concurrency_mode: "fixed",
+  probe_concurrency_effective: 0,
+  probe_concurrency_reason: "",
+  probe_concurrency_adjusted_at: "",
+  verdict_gc_retention: "",
 };
 
 function asNumber(raw: unknown, fallback: number): number {
@@ -43,6 +49,22 @@ function normalizeRuntimeConfig(raw: Partial<RuntimeConfig> | null | undefined):
   }
 
   return {
+    probe_concurrency: asNumber(raw.probe_concurrency, DEFAULT_CONFIG.probe_concurrency),
+    probe_concurrency_mode:
+      raw.probe_concurrency_mode === "auto" ? "auto" : "fixed",
+    probe_concurrency_effective: asNumber(
+      raw.probe_concurrency_effective,
+      DEFAULT_CONFIG.probe_concurrency_effective,
+    ),
+    probe_concurrency_reason: asString(
+      raw.probe_concurrency_reason,
+      DEFAULT_CONFIG.probe_concurrency_reason,
+    ),
+    probe_concurrency_adjusted_at: asString(
+      raw.probe_concurrency_adjusted_at,
+      DEFAULT_CONFIG.probe_concurrency_adjusted_at,
+    ),
+    verdict_gc_retention: asString(raw.verdict_gc_retention, DEFAULT_CONFIG.verdict_gc_retention),
     request_log_enabled: Boolean(raw.request_log_enabled),
     reverse_proxy_log_detail_enabled: Boolean(raw.reverse_proxy_log_detail_enabled),
     reverse_proxy_log_req_headers_max_bytes: asNumber(

@@ -28,6 +28,7 @@ import {
   resetPlatform,
   updatePlatform,
 } from "./api";
+import { PlatformPolicyPanel } from "./PlatformPolicyPanel";
 import {
   allocationPolicies,
   allocationPolicyLabel,
@@ -405,6 +406,8 @@ export function PlatformDetailPage() {
       </header>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {platform ? <PlatformPolicyPanel platform={platform} /> : null}
 
       {!platformId ? (
         <div className="callout callout-error">

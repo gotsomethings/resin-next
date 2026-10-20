@@ -96,6 +96,8 @@ var runtimeConfigAllowedFields = map[string]bool{
 	"probe_concurrency_mode":                   true,
 	// Read-only echo of the governor's live value; accepted but overwritten.
 	"probe_concurrency_effective":              true,
+	"probe_concurrency_reason":                 true,
+	"probe_concurrency_adjusted_at":            true,
 	"verdict_gc_retention":                     true,
 }
 
@@ -203,9 +205,13 @@ func (s *ControlPlaneService) PatchRuntimeConfig(patchJSON json.RawMessage) (*co
 		return nil, verr
 	}
 
-	// probe_concurrency_effective is a read-only echo: never trust the body.
+	// The governor owns effective/reason/time; never trust the body for them.
 	if s.ProbeMgr != nil {
 		newCfg.ProbeConcurrencyEffective = s.ProbeMgr.EffectiveConcurrency()
+	}
+	if current := s.RuntimeCfg.Load(); current != nil {
+		newCfg.ProbeConcurrencyReason = current.ProbeConcurrencyReason
+		newCfg.ProbeConcurrencyAdjustedAt = current.ProbeConcurrencyAdjustedAt
 	}
 
 	// 4. Additional validation.

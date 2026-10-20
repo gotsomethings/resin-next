@@ -15,6 +15,16 @@ export type RuntimeConfig = {
   latency_decay_window: string;
   cache_flush_interval: string;
   cache_flush_dirty_threshold: number;
+
+  // Probe concurrency governance (P3).
+  probe_concurrency: number;
+  probe_concurrency_mode: "fixed" | "auto";
+  probe_concurrency_effective: number;
+  probe_concurrency_reason: string;
+  probe_concurrency_adjusted_at: string;
+
+  // Verdict ledger retention (P2/P3).
+  verdict_gc_retention: string;
 };
 
 export type EnvConfig = {

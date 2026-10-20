@@ -445,6 +445,8 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 			if cur := a.runtimeCfg.Load(); cur != nil {
 				next := *cur
 				next.ProbeConcurrencyEffective = effective
+				next.ProbeConcurrencyReason = reason
+				next.ProbeConcurrencyAdjustedAt = at.UTC().Format(time.RFC3339Nano)
 				a.runtimeCfg.Store(&next)
 			}
 		},

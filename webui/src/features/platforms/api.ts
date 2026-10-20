@@ -1,5 +1,7 @@
 import { apiRequest } from "../../lib/api-client";
 import type {
+  EgressIPPage,
+  EgressIPRow,
   ListPlatformLeasesInput,
   PageResponse,
   Platform,
@@ -167,4 +169,11 @@ export async function clearAllPlatformLeases(id: string): Promise<void> {
   await apiRequest<void>(`${basePath}/${id}/leases`, {
     method: "DELETE",
   });
+}
+
+
+export async function listPlatformEgress(id: string): Promise<EgressIPPage> {
+  const data = await apiRequest<{ items?: EgressIPRow[]; total?: number }>(`${basePath}/${id}/egress`);
+  const items = Array.isArray(data.items) ? data.items : [];
+  return { items, total: typeof data.total === "number" ? data.total : items.length };
 }
