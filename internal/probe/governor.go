@@ -129,9 +129,12 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 
 	if tight {
 		g.relaxRun = 0
-		// Single tight sample steps down immediately; adjustGate only prevents a
-		// second step inside the same minute.
-		if g.lastAdjust.IsZero() || now.Sub(g.lastAdjust) >= adjustGate {
+		// Step down on the FIRST tight sample. The gate only prevents a second
+		// step inside the same minute (a single tight sample must never be
+		// ignored on a small box).
+		firstEver := g.lastAdjust.IsZero()
+		gateOpen := firstEver || now.Sub(g.lastAdjust) >= adjustGate
+		if gateOpen {
 			next := effective * 7 / 10
 			if next < floor {
 				next = floor
@@ -147,20 +150,23 @@ func (g *Governor) Step(now time.Time, s ResourceSample) {
 
 	if relaxed {
 		g.relaxRun++
-		if g.relaxRun >= relaxSamples && effective < settings &&
-			(g.lastAdjust.IsZero() || now.Sub(g.lastAdjust) >= adjustGate) {
+		// Recovery depends ONLY on consecutive relaxed samples; it is not paced
+		// by wall-clock time. Each step consumes the streak.
+		if g.relaxRun >= relaxSamples && effective < settings {
 			next := effective + settings*3/10
 			if next > settings {
 				next = settings
 			}
 			actual := m.SetEffectiveConcurrency(next)
-			g.lastAdjust = now
+			g.relaxRun = 0
 			g.report(actual, "pressure released", now)
 		}
 		return
 	}
 
-	// Hysteresis band: keep counters, take no action.
+	// Hysteresis band: neither counts as relaxed nor resets the streak. It also
+	// never accelerates a later step-down: the down path is gated by lastAdjust,
+	// which only advances when an actual step-down happens.
 }
 
 func (g *Governor) report(effective int, reason string, at time.Time) {
