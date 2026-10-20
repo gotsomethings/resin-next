@@ -39,6 +39,17 @@ func (o *scriptedOutbound) DialContext(ctx context.Context, network string, dest
 	case "timeout":
 		<-ctx.Done()
 		return nil, ctx.Err()
+	case "http403":
+		client, server := net.Pipe()
+		go func() {
+			defer server.Close()
+			buf := make([]byte, 4096)
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+			_, _ = server.Write([]byte("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"))
+		}()
+		return client, nil
 	}
 	client, server := net.Pipe()
 	go func() {
@@ -210,5 +221,97 @@ func TestPlatformProbe_ScopeSkipsRecentlyProbedNormalIP(t *testing.T) {
 	pp.sweep(newTarget())
 	if fv.calls != 1 {
 		t.Fatalf("a normal IP with no probe timestamp is still due, got %d calls", fv.calls)
+	}
+}
+
+// A pass must write the node-level probe stats that the filter dimensions read.
+func TestPlatformProbe_WritesNodeProbeStats(t *testing.T) {
+	pool, h := probeFixture(t, "ok", "10.3.0.1")
+	fv := newFakeVerdict()
+	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return 2 * time.Second }})
+
+	pp.sweep(newTarget())
+
+	entry, ok := pool.GetEntry(h)
+	if !ok {
+		t.Fatal("node missing")
+	}
+	if got := entry.AliveStreak.Load(); got != 1 {
+		t.Fatalf("AliveStreak = %d, want 1", got)
+	}
+	succ, total := entry.ProbeWindow.Stats(time.Now())
+	if total != 1 || succ != 1 {
+		t.Fatalf("ProbeWindow = %d/%d, want 1/1", succ, total)
+	}
+	if entry.LastProbeSuccess.Load() <= 0 {
+		t.Fatal("LastProbeSuccess must be set on pass")
+	}
+	if entry.P95LatencyNs.Load() <= 0 {
+		t.Fatal("P95LatencyNs must be set on pass")
+	}
+}
+
+// A 403 counts as failure and must not touch LastProbeSuccess.
+func TestPlatformProbe_403WritesFailureStats(t *testing.T) {
+	pool, h := probeFixture(t, "http403", "10.3.0.2")
+	fv := newFakeVerdict()
+	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return time.Second }})
+
+	pp.sweep(newTarget())
+
+	entry, _ := pool.GetEntry(h)
+	if got := entry.AliveStreak.Load(); got != 0 {
+		t.Fatalf("AliveStreak = %d, want 0", got)
+	}
+	succ, total := entry.ProbeWindow.Stats(time.Now())
+	if total != 1 || succ != 0 {
+		t.Fatalf("ProbeWindow = %d/%d, want 0/1", succ, total)
+	}
+	if entry.LastProbeSuccess.Load() != 0 {
+		t.Fatal("LastProbeSuccess must stay 0 on failure")
+	}
+	if entry.P95LatencyNs.Load() != 0 {
+		t.Fatal("P95LatencyNs must stay 0 on failure (no latency sample)")
+	}
+}
+
+// One IP, several nodes: the probe result belongs to the IP, so all nodes get it.
+func TestPlatformProbe_SharedIPUpdatesAllNodes(t *testing.T) {
+	subMgr := topology.NewSubscriptionManager()
+	sub := subscription.NewSubscription("s", "s", "https://example.com", true, false)
+	subMgr.Register(sub)
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 8,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return time.Minute },
+	})
+
+	const sharedIP = "10.3.1.1"
+	var hashes []node.Hash
+	for i := 0; i < 2; i++ {
+		raw := []byte(`{"type":"ss","server":"` + sharedIP + `","port":` + string(rune('4'+i)) + `443}`)
+		h := node.HashFromRawOptions(raw)
+		pool.AddNodeFromSub(h, raw, sub.ID)
+		sub.ManagedNodes().StoreNode(h, subscription.ManagedNode{Tags: []string{"all"}})
+		e, _ := pool.GetEntry(h)
+		var ob adapter.Outbound = &scriptedOutbound{mode: "ok"}
+		e.Outbound.Store(&ob)
+		e.CircuitOpenSince.Store(0)
+		e.SetEgressIP(netip.MustParseAddr(sharedIP))
+		e.LatencyTable.LoadEntry("example.com", node.DomainLatencyStats{Ewma: 10 * time.Millisecond, LastUpdated: time.Now()})
+		hashes = append(hashes, h)
+	}
+
+	fv := newFakeVerdict()
+	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return 2 * time.Second }})
+	pp.sweep(newTarget())
+
+	for _, h := range hashes {
+		e, _ := pool.GetEntry(h)
+		if got := e.AliveStreak.Load(); got != 1 {
+			t.Fatalf("node %s AliveStreak = %d, want 1", h.Hex(), got)
+		}
 	}
 }

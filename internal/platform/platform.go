@@ -320,14 +320,17 @@ func (p *Platform) evaluateNode(
 
 	// 7. latency_p95_max_ms.
 	if pol.LatencyP95MaxMs > 0 {
+		// No samples (e.g. right after a restart) => the dimension does not apply.
 		p95 := time.Duration(entry.P95LatencyNs.Load())
-		if p95 <= 0 || p95.Milliseconds() > int64(pol.LatencyP95MaxMs) {
+		if p95 > 0 && p95.Milliseconds() > int64(pol.LatencyP95MaxMs) {
 			return false
 		}
 	}
 
 	// 8. min_alive_streak.
-	if pol.MinAliveStreak > 0 {
+	if pol.MinAliveStreak > 0 && entry.LastProbeAttempt.Load() > 0 {
+		// Never-probed nodes are exempt: the streak is in-memory and empty after a
+		// restart, so filtering them would empty the pool until the first sweep.
 		if int(entry.AliveStreak.Load()) < pol.MinAliveStreak {
 			return false
 		}
@@ -335,14 +338,15 @@ func (p *Platform) evaluateNode(
 
 	// 9. min_probe_success_rate.
 	if pol.MinProbeSuccessRate > 0 {
-		rate, ok := entry.ProbeSuccessRate(now)
-		if !ok || rate < pol.MinProbeSuccessRate {
+		// No samples => the dimension does not apply (avoids a post-restart empty pool).
+		if rate, ok := entry.ProbeSuccessRate(now); ok && rate < pol.MinProbeSuccessRate {
 			return false
 		}
 	}
 
 	// 10. max_last_probe_age.
-	if pol.MaxLastProbeAge > 0 {
+	if pol.MaxLastProbeAge > 0 && entry.LastProbeAttempt.Load() > 0 {
+		// Never-probed nodes are exempt for the same reason as min_alive_streak.
 		last := entry.LastProbeSuccess.Load()
 		if last <= 0 || now.Sub(time.Unix(0, last)) > pol.MaxLastProbeAge {
 			return false

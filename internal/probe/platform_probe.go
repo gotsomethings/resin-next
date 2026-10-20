@@ -180,8 +180,12 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 		go func(c probeCandidate) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			pass, _ := p.probeOne(t, c.hash)
-			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), pass, time.Now(), t.Verdict)
+			pass, latency := p.probeOne(t, c.hash)
+			now := time.Now()
+			// The probe belongs to the EGRESS IP, not to one node: every node behind
+			// that IP shares the result, so node-level filters stay meaningful.
+			p.recordIPProbeResult(c.ip, pass, latency, now)
+			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), pass, now, t.Verdict)
 			if (black || rehabbed) && p.cfg.OnVerdictChange != nil {
 				p.cfg.OnVerdictChange(t.ID)
 			}
@@ -266,3 +270,26 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 }
 
 var _ = fmt.Sprintf
+
+// recordIPProbeResult writes one probe outcome into every node sharing the IP.
+// latency is only used on pass; failures record zero so P95 stays honest.
+func (p *PlatformProbe) recordIPProbeResult(ip netip.Addr, pass bool, latency time.Duration, now time.Time) {
+	subLookup := p.cfg.Pool.MakeSubLookup()
+	lat := time.Duration(0)
+	if pass {
+		lat = latency
+		if lat <= 0 {
+			// A successful probe always has some latency; a zero reading is a
+			// clock-resolution artifact. Record 1ns so the sample is counted.
+			lat = time.Nanosecond
+		}
+	}
+	p.cfg.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
+		if entry.GetEgressIP().Unmap() != ip {
+			return true
+		}
+		entry.RecordProbeResult(pass, lat, now)
+		return true
+	})
+	_ = subLookup
+}

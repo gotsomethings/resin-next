@@ -54,7 +54,7 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 2. `latency_max_ms` — 延迟上限
 3. `latency_p95_max_ms` — P95 上限（真实样本环，非 EWMA 近似）
 4. `min_alive_streak` — 最近 N 次系统探测全活
-5. `min_probe_success_rate` — 近 24h 成功率下限（小时级滑窗）
+5. `min_probe_success_rate` — 近 24h 成功率下限（小时级滑窗）。**无样本（total==0）时该维度不生效（放行）**；同理 `min_alive_streak` / `max_last_probe_age` / `latency_p95_max_ms` 在节点从未探测过（或 P95 无样本）时也不生效，避免重启后内存态清空导致平台空池 502。
 6. `max_last_probe_age` — 距上次成功探测上限
 7. `min_node_age` — 入池最短时长
 8. `egress_ip_version` — v4 / v6
