@@ -160,6 +160,9 @@ func tryFailoverConnect(
 	exclude := failedRoute.NodeHash
 	switches := 0
 	for switches < plat.Failover.MaxSwitches && time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			break
+		}
 		route, err := deps.router.RebindLease(platformName, account, exclude)
 		if err != nil {
 			break

@@ -91,6 +91,51 @@ func randomRoute(
 	return selected, nil
 }
 
+// randomRouteExcluding is randomRoute with one node removed from the candidate
+// set. Failover uses it so the replacement honours the platform's allocation
+// policy instead of picking uniformly at random.
+func randomRouteExcluding(
+	plat *platform.Platform,
+	stats *IPLoadStats,
+	pool PoolAccessor,
+	targetDomain string,
+	authorities []string,
+	p2cWindow time.Duration,
+	exclude node.Hash,
+) (node.Hash, error) {
+	var candidates []node.Hash
+	plat.View().Range(func(h node.Hash) bool {
+		if h != exclude {
+			candidates = append(candidates, h)
+		}
+		return true
+	})
+	if len(candidates) == 0 {
+		return node.Zero, ErrNoAvailableNodes
+	}
+	if len(candidates) == 1 {
+		return candidates[0], nil
+	}
+
+	rng := randomRouteRNGPool.Get().(*rand.Rand)
+	defer randomRouteRNGPool.Put(rng)
+
+	i1 := rng.IntN(len(candidates))
+	i2 := rng.IntN(len(candidates))
+	if i2 == i1 {
+		i2 = (i1 + 1) % len(candidates)
+	}
+	h1, h2 := candidates[i1], candidates[i2]
+
+	lat1, lat2 := compareLatencies(h1, h2, pool, targetDomain, authorities, p2cWindow)
+	s1 := calculateScore(h1, lat1, plat, stats, pool)
+	s2 := calculateScore(h2, lat2, plat, stats, pool)
+	if s1 < s2 {
+		return h1, nil
+	}
+	return h2, nil
+}
+
 // compareLatencies determines the latency values for h1 and h2.
 // Implements the 3-level comparison logic:
 // 1. Target domain present in both and recent.

@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"math/rand/v2"
 	"time"
 
 	"github.com/Resinat/Resin/internal/node"
@@ -23,21 +22,27 @@ func (r *Router) RebindLease(platName, account string, failedHash node.Hash) (Ro
 	}
 	state := r.ensurePlatformState(plat.ID)
 
-	var candidates []node.Hash
-	plat.View().Range(func(h node.Hash) bool {
-		if h == failedHash {
-			return true
-		}
-		if _, ok := r.pool.GetEntry(h); ok {
-			candidates = append(candidates, h)
-		}
-		return true
-	})
-	if len(candidates) == 0 {
-		return RouteResult{}, ErrNoAvailableNodes
+	var authorities []string
+	if r.authorities != nil {
+		authorities = r.authorities()
+	}
+	var p2cWindow time.Duration
+	if r.p2cWindow != nil {
+		p2cWindow = r.p2cWindow()
 	}
 
-	h := candidates[rand.IntN(len(candidates))]
+	h, err := randomRouteExcluding(
+		plat,
+		state.IPLoadStats,
+		r.pool,
+		"",
+		authorities,
+		p2cWindow,
+		failedHash,
+	)
+	if err != nil {
+		return RouteResult{}, err
+	}
 	entry, ok := r.pool.GetEntry(h)
 	if !ok {
 		return RouteResult{}, ErrNoAvailableNodes

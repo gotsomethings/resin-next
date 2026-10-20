@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,5 +127,84 @@ func TestConnectFailover_BudgetExhaustedReleasesLease(t *testing.T) {
 	}
 	if lease := router.ReadLease(model.LeaseKey{PlatformID: "p1", Account: "acct"}); lease != nil {
 		t.Fatalf("all nodes failed: lease must be released, got %+v", lease)
+	}
+}
+
+// A canceled context must stop the retry loop before any further rebind/dial.
+// The first dial fails; the context is canceled during it; the second node has a
+// dialing outbound that would otherwise succeed. If the loop kept going we would
+// observe 2 dial attempts and a non-nil session.
+func TestFailover_ContextCanceledStopsEarly(t *testing.T) {
+	subMgr := topology.NewSubscriptionManager()
+	sub := subscription.NewSubscription("sub-c", "sub-c", "https://example.com/sub", true, false)
+	subMgr.Register(sub)
+
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 16,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var dials atomic.Int32
+
+	mk := func(tag, ip string, onDial func()) node.Hash {
+		raw := []byte(`{"type":"ss","server":"` + ip + `","port":443}`)
+		h := node.HashFromRawOptions(raw)
+		pool.AddNodeFromSub(h, raw, sub.ID)
+		sub.ManagedNodes().StoreNode(h, subscription.ManagedNode{Tags: []string{tag}})
+		e, ok := pool.GetEntry(h)
+		if !ok {
+			t.Fatalf("node %s missing", tag)
+		}
+		var ob adapter.Outbound = &mockOutbound{dialFunc: func(c context.Context, _ string, _ M.Socksaddr) (net.Conn, error) {
+			dials.Add(1)
+			if onDial != nil {
+				onDial()
+			}
+			return nil, errors.New("dial refused")
+		}}
+		e.Outbound.Store(&ob)
+		e.CircuitOpenSince.Store(0)
+		e.SetEgressIP(netip.MustParseAddr(ip))
+		e.LatencyTable.LoadEntry("example.com", node.DomainLatencyStats{Ewma: 50 * time.Millisecond, LastUpdated: time.Now()})
+		return h
+	}
+
+	first := true
+	hA := mk("a", "10.20.0.1", func() {
+		if first {
+			first = false
+			cancel() // client goes away while the first dial is in flight
+		}
+	})
+	mk("b", "10.20.0.2", nil)
+
+	plat := platform.NewPlatform("pc", "PC", nil, nil)
+	plat.StickyTTLNs = int64(time.Hour)
+	plat.Failover = platform.FailoverConfig{Enabled: true, MaxSwitches: 5, Deadline: 5 * time.Second, Stage: "connect"}
+	poolRange := func(fn func(node.Hash, *node.NodeEntry) bool) { pool.Range(fn) }
+	plat.FullRebuild(poolRange, pool.MakeSubLookup(), func(netip.Addr) string { return "us" })
+	pool.RegisterPlatform(plat)
+
+	router := routing.NewRouter(routing.RouterConfig{Pool: pool})
+	now := time.Now()
+	if err := router.UpsertLease(model.Lease{
+		PlatformID: "pc", Account: "acct", NodeHash: hA.Hex(), EgressIP: "10.20.0.1",
+		CreatedAtNs: now.UnixNano(), ExpiryNs: now.Add(time.Hour).UnixNano(), LastAccessedNs: now.UnixNano(),
+	}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	res := prepareConnectTunnel(ctx, tunnelDeps{router: router, pool: pool}, "PC", "acct", "example.com:443")
+	if res.session != nil {
+		_ = res.session.upstreamConn.Close()
+		t.Fatal("canceled request must not produce a session")
+	}
+	if got := dials.Load(); got != 1 {
+		t.Fatalf("dial attempts = %d, want 1 (loop must stop after cancel)", got)
 	}
 }
