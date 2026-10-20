@@ -385,6 +385,31 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		if err := verdictStore.Load(ids); err != nil {
 			log.Printf("verdict store load: %v", err)
 		}
+		// A platform that filters on probe statistics but never probes will never
+		// collect samples, so those dimensions silently do nothing. Say so loudly;
+		// we deliberately do NOT flip probe_enabled on the operator's behalf.
+		for _, pl := range persisted {
+			if pl.ProbeEnabled {
+				continue
+			}
+			var dims []string
+			if pl.MinProbeSuccessRate > 0 {
+				dims = append(dims, "min_probe_success_rate")
+			}
+			if pl.MinAliveStreak > 0 {
+				dims = append(dims, "min_alive_streak")
+			}
+			if pl.MaxLastProbeAgeNs > 0 {
+				dims = append(dims, "max_last_probe_age")
+			}
+			if pl.LatencyP95MaxMs > 0 {
+				dims = append(dims, "latency_p95_max_ms")
+			}
+			if len(dims) > 0 {
+				log.Printf("WARN platform %q (%s): probe_enabled=false, so %v will never take effect (no probe samples)",
+					pl.Name, pl.ID, dims)
+			}
+		}
 	}
 	a.verdicts = verdictStore
 

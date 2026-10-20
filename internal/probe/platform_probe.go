@@ -2,7 +2,6 @@ package probe
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -269,12 +268,9 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 	return false, latency
 }
 
-var _ = fmt.Sprintf
-
 // recordIPProbeResult writes one probe outcome into every node sharing the IP.
 // latency is only used on pass; failures record zero so P95 stays honest.
 func (p *PlatformProbe) recordIPProbeResult(ip netip.Addr, pass bool, latency time.Duration, now time.Time) {
-	subLookup := p.cfg.Pool.MakeSubLookup()
 	lat := time.Duration(0)
 	if pass {
 		lat = latency
@@ -291,5 +287,4 @@ func (p *PlatformProbe) recordIPProbeResult(ip netip.Addr, pass bool, latency ti
 		entry.RecordProbeResult(pass, lat, now)
 		return true
 	})
-	_ = subLookup
 }

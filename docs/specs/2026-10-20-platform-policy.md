@@ -63,6 +63,8 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 11. `ip_type_filters` — 住宅/机房（ASN 组织名启发式）
 12. `egress_ip_filters` — 手动白/黑，支持 `!` 排除，IP 与 CIDR
 
+若平台配置了上述任一探测类维度（`min_probe_success_rate` / `min_alive_streak` / `max_last_probe_age` / `latency_p95_max_ms`）但 `probe_enabled=false`，启动时记录 WARN（平台名 + 不生效的维度），且这些维度不会生效；系统不会自动开启探测。
+
 ## 五、换路（P4）
 
 参数：`failover_enabled`(false)、`failover_max_switches`(1–10，默认 3)、`failover_deadline`(1s–1m，默认 15s)、`failover_stage`(默认 `connect`)。

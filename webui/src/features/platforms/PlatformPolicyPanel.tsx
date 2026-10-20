@@ -313,6 +313,16 @@ export function PlatformPolicyPanel({ platform }: Props) {
           <span>{t("最近成功探测最大年龄")}</span>
           <Input value={form.max_last_probe_age} onChange={(e) => setForm({ ...form, max_last_probe_age: e.target.value })} />
         </label>
+
+        {!form.probe_enabled &&
+        (form.latency_p95_max_ms > 0 ||
+          form.min_alive_streak > 0 ||
+          form.min_probe_success_rate > 0 ||
+          (form.max_last_probe_age !== "" &&
+            form.max_last_probe_age !== "0s" &&
+            form.max_last_probe_age !== "0")) ? (
+          <p className="muted">{t("未开启探测，这些维度不会生效")}</p>
+        ) : null}
         <label className="field">
           <span>{t("最短入池时长")}</span>
           <Input value={form.min_node_age} onChange={(e) => setForm({ ...form, min_node_age: e.target.value })} />
