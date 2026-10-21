@@ -4,6 +4,15 @@ export const APP_TITLE_ZH = "Resin · 高性能粘性代理池";
 const APP_TITLE_EN = "Resin · Sticky Proxy Pool";
 
 const EXACT_ZH_TO_EN: Record<string, string> = {
+  "探测并发治理": "Probe concurrency governance",
+  "探测并发设定值": "Probe concurrency limit",
+  "并发模式": "Concurrency mode",
+  "固定": "Fixed",
+  "自动": "Auto",
+  "台账保留期": "Egress ledger retention",
+  "当前生效值": "Currently in effect",
+  "未开启探测，这些维度不会生效": "Probing is off, so these dimensions will not take effect",
+  "近 24 小时探测通过率（按小时桶滚动，无样本时不限制）": "Probe pass rate over the last 24h (hourly buckets; not enforced when there are no samples)",
   "Resin · 高性能粘性代理池": APP_TITLE_EN,
   "高性能粘性代理池 · 管理面板": "High-performance sticky proxy pool · Admin Console",
   "主导航": "Main Navigation",

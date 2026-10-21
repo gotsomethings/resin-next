@@ -5,6 +5,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
 import { Switch } from "../../components/ui/Switch";
 import { Textarea } from "../../components/ui/Textarea";
 import { ToastContainer } from "../../components/ui/Toast";
@@ -12,7 +13,6 @@ import { useToast } from "../../hooks/useToast";
 import i18next, { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { getEnvConfig, patchSystemConfig, getSystemConfig, getDefaultSystemConfig } from "./api";
-import { ConcurrencyPanel } from "./ConcurrencyPanel";
 import type { RuntimeConfig, RuntimeConfigPatch } from "./types";
 
 type RuntimeConfigForm = {
@@ -37,7 +37,8 @@ type RuntimeConfigForm = {
   probe_concurrency_effective: string;
   probe_concurrency_reason: string;
   probe_concurrency_adjusted_at: string;
-  verdict_gc_retention: string;};
+  verdict_gc_retention: string;
+};
 
 const EDITABLE_FIELDS: Array<keyof RuntimeConfig> = [
   "request_log_enabled",
@@ -56,6 +57,9 @@ const EDITABLE_FIELDS: Array<keyof RuntimeConfig> = [
   "latency_decay_window",
   "cache_flush_interval",
   "cache_flush_dirty_threshold",
+  "probe_concurrency",
+  "probe_concurrency_mode",
+  "verdict_gc_retention",
 ];
 
 const FIELD_LABELS: Record<keyof RuntimeConfig, string> = {
@@ -448,9 +452,7 @@ export function SystemConfigPage() {
         </div>
       </header>
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-
-      <ConcurrencyPanel />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {!form ? (
         <Card className="syscfg-form-card platform-directory-card">
@@ -503,6 +505,130 @@ export function SystemConfigPage() {
                   </div>
                 </div>
               </section>
+
+              <section className="syscfg-section">
+
+                <h4>{t("探测并发治理")}</h4>
+
+                <div className="form-grid">
+
+                  <div className="field-group">
+
+                    <div style={{ display: "flex", alignItems: "center" }}>
+
+                      <label className="field-label" htmlFor="sys-probe-concurrency" style={{ margin: 0 }}>
+
+                        {t("探测并发设定值")}
+
+                      </label>
+
+                      {renderRestoreButton("probe_concurrency")}
+
+                    </div>
+
+                    <Input
+
+                      id="sys-probe-concurrency"
+
+                      type="number"
+
+                      min={1}
+
+                      max={10000}
+
+                      value={form.probe_concurrency}
+
+                      onChange={(event) => setFormField("probe_concurrency", event.target.value)}
+
+                    />
+
+                  </div>
+
+                  <div className="field-group">
+
+                    <div style={{ display: "flex", alignItems: "center" }}>
+
+                      <label className="field-label" htmlFor="sys-probe-concurrency-mode" style={{ margin: 0 }}>
+
+                        {t("并发模式")}
+
+                      </label>
+
+                      {renderRestoreButton("probe_concurrency_mode")}
+
+                    </div>
+
+                    <Select
+
+                      id="sys-probe-concurrency-mode"
+
+                      value={form.probe_concurrency_mode}
+
+                      onChange={(event) => setFormField("probe_concurrency_mode", event.target.value)}
+
+                    >
+
+                      <option value="fixed">{t("固定")}</option>
+
+                      <option value="auto">{t("自动")}</option>
+
+                    </Select>
+
+                  </div>
+
+                  <div className="field-group">
+
+                    <div style={{ display: "flex", alignItems: "center" }}>
+
+                      <label className="field-label" htmlFor="sys-verdict-gc-retention" style={{ margin: 0 }}>
+
+                        {t("台账保留期")}
+
+                      </label>
+
+                      {renderRestoreButton("verdict_gc_retention")}
+
+                    </div>
+
+                    <Input
+
+                      id="sys-verdict-gc-retention"
+
+                      value={form.verdict_gc_retention}
+
+                      onChange={(event) => setFormField("verdict_gc_retention", event.target.value)}
+
+                    />
+
+                  </div>
+
+                </div>
+
+                <p className="muted" style={{ marginTop: 8, fontSize: "0.85em" }}>
+
+                  {t("当前生效值")}: {configQuery.data?.probe_concurrency_effective ?? "-"}
+
+                  {
+
+                    configQuery.data?.probe_concurrency_reason
+
+                      ? ` · ${configQuery.data.probe_concurrency_reason}`
+
+                      : ""
+
+                  }
+
+                  {configQuery.data?.probe_concurrency_adjusted_at
+
+                    ? ` @ ${configQuery.data.probe_concurrency_adjusted_at}`
+
+                    : ""}
+
+                </p>
+
+              </section>
+
+
 
               <section className="syscfg-section">
                 <h4>{t("请求日志")}</h4>
