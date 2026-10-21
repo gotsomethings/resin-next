@@ -3,6 +3,8 @@ export type GeoIPStatus = {
   next_scheduled_update: string;
   /** False when no ASN database is loaded, so ASN/IP-type filters cannot apply. */
   asn_available: boolean;
+  asn_db_mtime: string;
+  asn_next_update: string;
 };
 
 export type GeoIPLookupResult = {

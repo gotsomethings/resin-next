@@ -14,21 +14,33 @@ type GeoIPStatus struct {
 	DBMtime             string `json:"db_mtime"`
 	NextScheduledUpdate string `json:"next_scheduled_update"`
 	ASNAvailable        bool   `json:"asn_available"`
+	ASNDBMtime          string `json:"asn_db_mtime"`
+	ASNNextUpdate       string `json:"asn_next_update"`
 }
 
 // GetGeoIPStatus returns the current GeoIP status.
 func (s *ControlPlaneService) GetGeoIPStatus() GeoIPStatus {
 	status := GeoIPStatus{}
-	if t := s.GeoIP.LastUpdated(); !t.IsZero() {
-		status.DBMtime = t.UTC().Format(time.RFC3339Nano)
+	if s.GeoIP != nil {
+		if t := s.GeoIP.LastUpdated(); !t.IsZero() {
+			status.DBMtime = t.UTC().Format(time.RFC3339Nano)
+		}
+		if t := s.GeoIP.NextScheduledUpdate(); !t.IsZero() {
+			status.NextScheduledUpdate = t.UTC().Format(time.RFC3339Nano)
+			// The ASN database rides the same cron schedule.
+			status.ASNNextUpdate = status.NextScheduledUpdate
+		}
+		if t := s.GeoIP.ASNLastUpdated(); !t.IsZero() {
+			status.ASNDBMtime = t.UTC().Format(time.RFC3339Nano)
+		}
+		if loaded, _ := s.GeoIP.ASNStatus(); loaded {
+			status.ASNAvailable = true
+		}
 	}
 	if s.ASN != nil {
-		loaded, _, _ := s.ASN.Status()
-		status.ASNAvailable = loaded
-	}
-
-	if t := s.GeoIP.NextScheduledUpdate(); !t.IsZero() {
-		status.NextScheduledUpdate = t.UTC().Format(time.RFC3339Nano)
+		if loaded, _, _ := s.ASN.Status(); loaded {
+			status.ASNAvailable = true
+		}
 	}
 	return status
 }

@@ -16,6 +16,8 @@ export async function getGeoIPStatus(): Promise<GeoIPStatus> {
     db_mtime: data.db_mtime || "",
     next_scheduled_update: data.next_scheduled_update || "",
     asn_available: Boolean(data.asn_available),
+    asn_db_mtime: data.asn_db_mtime || "",
+    asn_next_update: data.asn_next_update || "",
   };
 }
 

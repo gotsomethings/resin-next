@@ -3,6 +3,7 @@ package geoip
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -97,6 +98,7 @@ func SingBoxOpen(path string) (GeoReader, error) {
 type ServiceConfig struct {
 	CacheDir       string             // directory where country.mmdb is stored
 	DBFilename     string             // default "country.mmdb"
+	ASNFilename    string             // default "GeoLite2-ASN.mmdb" (same release)
 	UpdateSchedule string             // cron expression, default "0 7 * * *"
 	OpenDB         OpenFunc           // function to open the database
 	Downloader     netutil.Downloader // shared downloader for fetching releases
@@ -105,6 +107,9 @@ type ServiceConfig struct {
 // ReleaseAPIURL is the GitHub API endpoint for the latest MetaCubeX rules release.
 const ReleaseAPIURL = "https://api.github.com/repos/MetaCubeX/meta-rules-dat/releases/latest"
 
+// DefaultASNFilename is the ASN database asset shipped in that same release.
+const DefaultASNFilename = "GeoLite2-ASN.mmdb"
+
 // Service provides GeoIP lookup with hot-reloading via RWMutex.
 type Service struct {
 	mu     sync.RWMutex
@@ -112,6 +117,8 @@ type Service struct {
 
 	cacheDir    string
 	dbFilename  string
+	asnFilename string
+	asn         *ASNService
 	openDB      OpenFunc
 	downloader  netutil.Downloader
 	cron        *cron.Cron
@@ -138,6 +145,9 @@ func NewService(cfg ServiceConfig) *Service {
 	if cfg.DBFilename == "" {
 		cfg.DBFilename = "country.mmdb"
 	}
+	if cfg.ASNFilename == "" {
+		cfg.ASNFilename = DefaultASNFilename
+	}
 	if cfg.UpdateSchedule == "" {
 		cfg.UpdateSchedule = "0 7 * * *"
 	}
@@ -145,7 +155,8 @@ func NewService(cfg ServiceConfig) *Service {
 	lifeCtx, lifeCancel := context.WithCancel(context.Background())
 	s := &Service{
 		cacheDir:   cfg.CacheDir,
-		dbFilename: cfg.DBFilename,
+		dbFilename:  cfg.DBFilename,
+		asnFilename: cfg.ASNFilename,
 		openDB:     cfg.OpenDB,
 		downloader: cfg.Downloader,
 		cron:       c,
@@ -155,7 +166,7 @@ func NewService(cfg ServiceConfig) *Service {
 
 	// Schedule periodic updates.
 	entryID, err := c.AddFunc(cfg.UpdateSchedule, func() {
-		if err := s.UpdateNow(); err != nil {
+		if err := s.UpdateAllNow(); err != nil {
 			log.Printf("[geoip] scheduled update failed: %v", err)
 		}
 	})
@@ -166,6 +177,36 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 
 	return s
+}
+
+// AttachASN enables ASN database maintenance on the same schedule and release
+// as the country database. Pass nil to disable it again.
+func (s *Service) AttachASN(svc *ASNService) {
+	s.asn = svc
+	if svc != nil {
+		svc.SetPath(filepath.Join(s.cacheDir, s.asnFilename))
+	}
+}
+
+// ASNStatus reports whether the ASN database is loaded plus its last error.
+func (s *Service) ASNStatus() (loaded bool, lastErr string) {
+	if s == nil || s.asn == nil {
+		return false, "asn_db_not_configured"
+	}
+	loaded, _, lastErr = s.asn.Status()
+	return loaded, lastErr
+}
+
+// ASNLastUpdated returns the ASN database mtime (zero when absent).
+func (s *Service) ASNLastUpdated() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	info, err := os.Stat(filepath.Join(s.cacheDir, s.asnFilename))
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
 }
 
 // Start loads the initial database (if present), checks for staleness
@@ -199,6 +240,34 @@ func (s *Service) Start() error {
 		}()
 	} else {
 		return fmt.Errorf("geoip: stat db %s: %w", dbPath, err)
+	}
+	if s.asn != nil {
+		asnPath := filepath.Join(s.cacheDir, s.asnFilename)
+		s.asn.SetPath(asnPath)
+		info, statErr := os.Stat(asnPath)
+		switch {
+		case statErr == nil:
+			if err := s.asn.Load(); err != nil {
+				log.Printf("[geoip] failed to load initial ASN db: %v", err)
+			}
+			if s.isStale(info.ModTime()) {
+				log.Println("[geoip] ASN database is stale, triggering background update")
+				go func() {
+					if err := s.UpdateASNNow(); err != nil {
+						log.Printf("[geoip] ASN startup update failed: %v", err)
+					}
+				}()
+			}
+		case os.IsNotExist(statErr):
+			log.Println("[geoip] no local ASN database found, triggering background download")
+			go func() {
+				if err := s.UpdateASNNow(); err != nil {
+					log.Printf("[geoip] ASN initial download failed: %v", err)
+				}
+			}()
+		default:
+			log.Printf("[geoip] stat ASN db %s: %v", asnPath, statErr)
+		}
 	}
 	s.cron.Start()
 	return nil
@@ -250,6 +319,9 @@ func (s *Service) Stop() {
 	if r != nil {
 		r.Close()
 	}
+	if s.asn != nil {
+		s.asn.Close()
+	}
 }
 
 // Lookup returns the country code for the given IP address.
@@ -276,19 +348,65 @@ type releaseInfo struct {
 	Assets  []releaseAsset `json:"assets"`
 }
 
-// UpdateNow downloads the latest GeoIP database from GitHub, verifies SHA256,
+// UpdateNow downloads the latest country database from GitHub, verifies SHA256,
 // atomically replaces the local file, and hot-reloads the reader.
-// Serialized via updateMu to prevent concurrent temp file races.
 func (s *Service) UpdateNow() error {
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
+	return s.updateCountryLocked()
+}
 
+// UpdateASNNow refreshes only the ASN database, from the same release.
+func (s *Service) UpdateASNNow() error {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	return s.updateASNLocked()
+}
+
+// UpdateAllNow refreshes both databases under one lock so a single "update
+// now" keeps them in step. Errors from either side are joined.
+func (s *Service) UpdateAllNow() error {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+	return errors.Join(s.updateCountryLocked(), s.updateASNLocked())
+}
+
+// updateCountryLocked installs and reloads the country database.
+// Callers must hold updateMu.
+func (s *Service) updateCountryLocked() error {
+	dbPath, err := s.downloadReleaseAsset(s.dbFilename)
+	if err != nil {
+		return err
+	}
+	return s.reloadReader(dbPath)
+}
+
+// updateASNLocked installs and reloads the ASN database.
+// Callers must hold updateMu. No attached ASN service means a no-op.
+func (s *Service) updateASNLocked() error {
+	if s.asn == nil {
+		return nil
+	}
+	asnPath, err := s.downloadReleaseAsset(s.asnFilename)
+	if err != nil {
+		return err
+	}
+	if s.asn.Path() != asnPath {
+		s.asn.SetPath(asnPath)
+	}
+	return s.asn.Load()
+}
+
+// downloadReleaseAsset resolves the named asset in the latest MetaCubeX
+// release, downloads it, verifies its SHA256 digest, atomically installs it in
+// cacheDir, and returns the final path.
+func (s *Service) downloadReleaseAsset(assetName string) (string, error) {
 	if s.isStopped() {
-		return context.Canceled
+		return "", context.Canceled
 	}
 
 	if s.downloader == nil {
-		return fmt.Errorf("geoip: no downloader configured")
+		return "", fmt.Errorf("geoip: no downloader configured")
 	}
 
 	parent := context.Background()
@@ -297,53 +415,53 @@ func (s *Service) UpdateNow() error {
 	}
 	ctx := parent
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
 
 	// 1. Fetch latest release metadata.
 	releaseBody, err := s.downloader.Download(ctx, ReleaseAPIURL)
 	if err != nil {
-		return fmt.Errorf("geoip: fetch release info: %w", err)
+		return "", fmt.Errorf("geoip: fetch release info: %w", err)
 	}
 
 	var release releaseInfo
 	if err := json.Unmarshal(releaseBody, &release); err != nil {
-		return fmt.Errorf("geoip: parse release info: %w", err)
+		return "", fmt.Errorf("geoip: parse release info: %w", err)
 	}
 
-	// 2. Find the .db asset URL and its SHA256 digest.
-	dbURL, digest := "", ""
+	// 2. Find the asset URL and its SHA256 digest.
+	assetURL, digest := "", ""
 	for _, a := range release.Assets {
-		if a.Name == s.dbFilename {
-			dbURL = a.BrowserDownloadURL
+		if a.Name == assetName {
+			assetURL = a.BrowserDownloadURL
 			if a.Digest != nil {
 				digest = *a.Digest
 			}
 		}
 	}
-	if dbURL == "" {
-		return fmt.Errorf("geoip: asset %q not found in release %s", s.dbFilename, release.TagName)
+	if assetURL == "" {
+		return "", fmt.Errorf("geoip: asset %q not found in release %s", assetName, release.TagName)
 	}
 	expectedHash := parseSHA256Digest(digest)
 	if expectedHash == "" {
-		return fmt.Errorf("geoip: asset %q missing valid sha256 digest in release %s", s.dbFilename, release.TagName)
+		return "", fmt.Errorf("geoip: asset %q missing valid sha256 digest in release %s", assetName, release.TagName)
 	}
 
-	// 3. Download .db to unique temp file.
-	dbData, err := s.downloader.Download(ctx, dbURL)
+	// 3. Download to a unique temp file.
+	assetData, err := s.downloader.Download(ctx, assetURL)
 	if err != nil {
-		return fmt.Errorf("geoip: download db: %w", err)
+		return "", fmt.Errorf("geoip: download %s: %w", assetName, err)
 	}
 
-	tmpFile, err := os.CreateTemp(s.cacheDir, s.dbFilename+".tmp.*")
+	tmpFile, err := os.CreateTemp(s.cacheDir, assetName+".tmp.*")
 	if err != nil {
-		return fmt.Errorf("geoip: create temp: %w", err)
+		return "", fmt.Errorf("geoip: create temp: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	if _, err := tmpFile.Write(dbData); err != nil {
+	if _, err := tmpFile.Write(assetData); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpPath)
-		return fmt.Errorf("geoip: write temp: %w", err)
+		return "", fmt.Errorf("geoip: write temp: %w", err)
 	}
 	tmpFile.Close()
 	// Clean up temp on any error after this point.
@@ -353,23 +471,18 @@ func (s *Service) UpdateNow() error {
 
 	// 4. Verify SHA256 — mandatory.
 	if err := VerifySHA256(tmpPath, expectedHash); err != nil {
-		return err
+		return "", err
 	}
 
 	// 5. Atomic rename.
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
-	dbPath := filepath.Join(s.cacheDir, s.dbFilename)
-	if err := os.Rename(tmpPath, dbPath); err != nil {
-		return fmt.Errorf("geoip: atomic replace: %w", err)
+	finalPath := filepath.Join(s.cacheDir, assetName)
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		return "", fmt.Errorf("geoip: atomic replace: %w", err)
 	}
-
-	// 6. Hot-reload reader.
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return s.reloadReader(dbPath)
+	return finalPath, nil
 }
 
 // reloadReader atomically replaces the current reader with a new one.

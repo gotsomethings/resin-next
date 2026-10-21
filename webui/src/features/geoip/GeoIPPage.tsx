@@ -69,6 +69,9 @@ export function GeoIPPage() {
   const status = statusQuery.data;
   const hasDBTime = Boolean(status?.db_mtime);
   const hasNextSchedule = Boolean(status?.next_scheduled_update);
+  const asnAvailable = Boolean(status?.asn_available);
+  const hasASNTime = Boolean(status?.asn_db_mtime);
+  const hasASNNext = Boolean(status?.asn_next_update);
 
   const singleRegion = useMemo(() => {
     if (!singleResult || !singleResult.region) {
@@ -137,6 +140,43 @@ export function GeoIPPage() {
             <div className="geoip-actions">
               <Badge variant={statusVariant(hasDBTime)}>
                 {hasDBTime ? t("数据库已加载") : t("数据库未加载")}
+              </Badge>
+              <Button size="sm" variant="secondary" onClick={() => void updateMutation.mutateAsync()} disabled={updateMutation.isPending}>
+                <ArrowDownToLine size={14} className={updateMutation.isPending ? "spin" : undefined} />
+                {updateMutation.isPending ? t("更新中...") : t("立即更新")}
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="geoip-status-card">
+            <div className="detail-header">
+              <div>
+                <h3>{t("ASN 库状态")}</h3>
+                <p>{t("ASN 数据库加载时间与下次计划更新")}</p>
+              </div>
+              <Database size={16} />
+            </div>
+
+            <div className="geoip-status-grid">
+              <div className="geoip-kv">
+                <span>{t("ASN 数据库更新时间")}</span>
+                <p>{hasASNTime ? formatDateTime(status?.asn_db_mtime || "") : "-"}</p>
+              </div>
+              <div className="geoip-kv">
+                <span>{t("ASN 下次计划更新")}</span>
+                <p>{hasASNNext ? formatDateTime(status?.asn_next_update || "") : "-"}</p>
+              </div>
+            </div>
+
+            {!asnAvailable ? (
+              <p className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.4 }}>
+                {t("ASN 库未安装，ASN 与 IP 类型筛选暂不生效")}
+              </p>
+            ) : null}
+
+            <div className="geoip-actions">
+              <Badge variant={statusVariant(asnAvailable)}>
+                {asnAvailable ? t("ASN 数据库已加载") : t("ASN 数据库未加载")}
               </Badge>
               <Button size="sm" variant="secondary" onClick={() => void updateMutation.mutateAsync()} disabled={updateMutation.isPending}>
                 <ArrowDownToLine size={14} className={updateMutation.isPending ? "spin" : undefined} />

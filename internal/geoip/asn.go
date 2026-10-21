@@ -78,6 +78,30 @@ func NewASNService(path string) *ASNService {
 	return &ASNService{path: path}
 }
 
+// openASNFile opens the database; swappable in tests.
+var openASNFile = OpenASN
+
+// SetPath retargets the service at another database file. The next Load picks
+// it up; a failed load keeps the previously loaded reader.
+func (s *ASNService) SetPath(path string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.path = path
+	s.mu.Unlock()
+}
+
+// Path reports the configured database path.
+func (s *ASNService) Path() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.path
+}
+
 // Load opens the configured database. It is safe to call again to reload.
 func (s *ASNService) Load() error {
 	if s == nil {
@@ -95,7 +119,7 @@ func (s *ASNService) Load() error {
 		s.mu.Unlock()
 		return nil
 	}
-	reader, err := OpenASN(s.path)
+	reader, err := openASNFile(s.path)
 	if err != nil {
 		s.mu.Lock()
 		s.err = fmt.Sprintf("asn_db_open_failed: %v", err)

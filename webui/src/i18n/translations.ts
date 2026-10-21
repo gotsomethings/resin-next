@@ -4,6 +4,14 @@ export const APP_TITLE_ZH = "Resin · 高性能粘性代理池";
 const APP_TITLE_EN = "Resin · Sticky Proxy Pool";
 
 const EXACT_ZH_TO_EN: Record<string, string> = {
+  "ASN 库状态": "ASN database status",
+  "ASN 数据库加载时间与下次计划更新": "ASN database load time and next scheduled update",
+  "ASN 数据库更新时间": "ASN database updated",
+  "ASN 下次计划更新": "ASN next scheduled update",
+  "ASN 数据库已加载": "ASN database loaded",
+  "ASN 数据库未加载": "ASN database not loaded",
+  "ASN 库未安装，ASN 与 IP 类型筛选暂不生效": "ASN database not installed; ASN and IP-type filters have no effect",
+
   "需 ASN 库；当前未安装，此维度不生效":
     "Needs the ASN database; it is not installed, so this dimension has no effect",
   "自动模式：由资源治理器按压力动态调整，切到固定模式后可手动设置": "Auto mode: the resource governor adjusts concurrency dynamically; switch to fixed to set it manually",

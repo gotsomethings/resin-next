@@ -35,6 +35,7 @@ type resinApp struct {
 	runtimeCfg      *atomic.Pointer[config.RuntimeConfig]
 	accountMatcher  *proxy.AccountMatcherRuntime
 	geoSvc          *geoip.Service
+	asnSvc          *geoip.ASNService
 	topoRuntime     *topologyRuntime
 	flushWorker     *state.CacheFlushWorker
 	metricsDB       *metrics.MetricsRepo
@@ -135,6 +136,10 @@ func (a *resinApp) initTopologyRuntime(engine *state.StateEngine) (*netutil.Retr
 
 	// Phase 2: Construct GeoIP service (start after retry downloader wiring).
 	a.geoSvc = newGeoIPService(a.envCfg.CacheDir, a.envCfg.GeoIPUpdateSchedule, retryDL)
+	// The ASN database ships in the same release as country.mmdb; the GeoIP
+	// service owns its download, verification, staleness check and hot reload.
+	a.asnSvc = geoip.NewASNService(filepath.Join(a.envCfg.CacheDir, geoip.DefaultASNFilename))
+	a.geoSvc.AttachASN(a.asnSvc)
 
 	// Phase 3: Topology (pool, probe, scheduler).
 	topoRuntime, err := newTopologyRuntime(
@@ -424,6 +429,7 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		Router:         a.topoRuntime.router,
 		ProbeMgr:       a.topoRuntime.probeMgr,
 		GeoIP:          a.geoSvc,
+		ASN:            a.asnSvc,
 		MatcherRuntime: a.accountMatcher,
 	}
 
