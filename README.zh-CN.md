@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="webui/public/vite.svg" width="48" alt="Resin Logo" />
-  <h1>Resin</h1>
+  <img src="webui/public/vite.svg" width="48" alt="Resin-next Logo" />
+  <h1>Resin-next</h1>
   <p><strong>将大量的代理订阅转化为一个稳定、智能、可观测且支持会话保持的统一代理入口。</strong></p>
 </div>
 
@@ -16,11 +16,13 @@
 
 ---
 
-**Resin** 是一个专为接管海量节点设计的**高性能智能代理池网关**。
+**Resin-next** 是一个专为接管海量节点设计的**高性能智能代理池网关**。
+
+> Resin-next 是基于 [Resin](https://github.com/Resinat/Resin) 的定制分支。
 
 它用于在上层屏蔽底层代理节点的不稳定性，将分散节点聚合为一个支持 **“会话保持（粘性路由）”** 的统一代理入口。
 
-## 💡 为什么选择 Resin？
+## 💡 为什么选择 Resin-next？
 
 - **海量接管**：轻松管理十万级规模的代理节点。高性能，原生支持高并发。
 - **智能调度与熔断**：全自动的 **被动+主动** 健康探测、出口 IP 探测、延迟分析，精准剔除坏节点。采用 P2C 算法结合按域名的延迟加权评分，智能选择最优节点。
@@ -28,7 +30,7 @@
 - **多种接入方式**：同时支持 HTTP 正向代理、SOCKS5 正向代理与 URL 反向代理，适配不同客户端与集成形态。
 - **多接入点管理**：可在 WebUI 热添加监听端口，并分别控制每个端口是否开放管理页面、HTTP 正向代理、HTTP 反向代理和 SOCKS5。
 - **可观测性**：提供详细的性能指标与日志记录，快速掌控全局（可视化 Web 管理后台）。包括完整的结构化请求日志，支持按平台、账号、目标站点等维度查询与审计。
-- **简单与强大兼得**：开箱即用的默认配置与深度自定义功能。无论你是只需几分钟跑通简单场景的个人使用者，还是需要高并发与高可用性的企业级团队，Resin 都能游刃有余。
+- **简单与强大兼得**：开箱即用的默认配置与深度自定义功能。无论你是只需几分钟跑通简单场景的个人使用者，还是需要高并发与高可用性的企业级团队，Resin-next 都能游刃有余。
 - **跨订阅智能去重**：不同订阅中配置相同的节点自动合并，共享健康状态，避免重复探测。
 - **热更新**：更新常用配置不用重启，更新订阅节点不断连。
 - **状态持久化**：重启后仍可恢复节点健康数据、延迟统计与租约绑定，便于生产环境连续运行与故障恢复。
@@ -111,10 +113,10 @@ services:
 ## 🟢 基础使用（非粘性代理）
 
 ### 简单接入代理
-如果你只需要一个高性能、大容量、且会自动健康管理的通用代理池，Resin 开箱即用。
-启动 Resin 服务后，你可以按客户端能力选择 HTTP 正向代理、SOCKS5 正向代理或反向代理接入。  
+如果你只需要一个高性能、大容量、且会自动健康管理的通用代理池，Resin-next 开箱即用。
+启动 Resin-next 服务后，你可以按客户端能力选择 HTTP 正向代理、SOCKS5 正向代理或反向代理接入。  
 如果你不想设置代理密码，请将环境变量显式设为空字符串：`RESIN_PROXY_TOKEN=""`（变量必须定义）。此时 HTTP 正向代理可直接接入 `http://127.0.0.1:2260`，SOCKS5 正向代理可直接接入 `socks5://127.0.0.1:2260`。
-通过二进制文件或源码运行时，Resin 也会在读取配置前自动加载当前工作目录下的 `.env` 文件；已经由系统或 shell 设置的环境变量优先级高于 `.env`。
+通过二进制文件或源码运行时，Resin-next 也会在读取配置前自动加载当前工作目录下的 `.env` 文件；已经由系统或 shell 设置的环境变量优先级高于 `.env`。
 
 HTTP 正向代理例子：
 
@@ -135,7 +137,7 @@ curl --proxy socks5h://127.0.0.1:2260 \
 
 当 `RESIN_PROXY_TOKEN=""` 时，SOCKS5 也允许无认证接入。
 
-如果你的客户端支持修改服务的 `BASE_URL`，你也可以尝试反向代理接入。URL 格式为：`/令牌/Platform(可选).Account(可选)/协议/目标地址`。例如，你可以通过下面的 curl 命令通过 Resin 访问 `https://api.ipify.org`。
+如果你的客户端支持修改服务的 `BASE_URL`，你也可以尝试反向代理接入。URL 格式为：`/令牌/Platform(可选).Account(可选)/协议/目标地址`。例如，你可以通过下面的 curl 命令通过 Resin-next 访问 `https://api.ipify.org`。
 
 ```bash
 curl http://127.0.0.1:2260/my-token/./https/api.ipify.org
@@ -144,7 +146,7 @@ curl http://127.0.0.1:2260/my-token/./https/api.ipify.org
 > 正向代理与反向代理的选择：如果条件允许，推荐尽量使用反向代理，对于可观测性更友好。如果您的客户端不支持修改 BaseURL，或者客户端需要 utls、非纯 WebAPI 请求这种反向代理不擅长的情况，请使用正向代理。
 
 ### 筛选节点
-如果你的服务对节点有筛选要求，例如只需要某个地区的节点，或者只需要来自某个订阅源的节点，或者只需要名字匹配特定正则表达式的节点，可以使用 Resin 的 Platform 概念来实现。
+如果你的服务对节点有筛选要求，例如只需要某个地区的节点，或者只需要来自某个订阅源的节点，或者只需要名字匹配特定正则表达式的节点，可以使用 Resin-next 的 Platform 概念来实现。
 
 你可以打开 `http://127.0.0.1:2260/ui/platforms` Platform 管理页面，创建一个 Platform。例如希望只使用来自美国、香港的节点，你可以创建一个名为 “MyPlatform” 的 Platform，然后在地区过滤规则中填入：
 ```
@@ -186,13 +188,13 @@ curl http://127.0.0.1:2260/my-token/MyPlatform/https/api.ipify.org
 
 ## 📖 进阶使用：粘性代理
 
-当业务遇到**对 IP 变化敏感**的服务，或者需要持续交互时，你需要使用 Resin 的核心特性：**粘性代理**。
+当业务遇到**对 IP 变化敏感**的服务，或者需要持续交互时，你需要使用 Resin-next 的核心特性：**粘性代理**。
 
 在此之前，先了解两个概念：
 
 ### 🎯 核心概念：平台 (Platform) 与 账号 (Account)
 - **平台 (Platform)**：节点的隔离池。你可以通过规则筛选节点（例如只使用“美国”节点）组建成一个专有池。系统默认存在一个装载所有可用节点的 `Default` 平台。
-- **账号 (Account)**：业务侧的唯一标识（如 `Tom` 或 `user_1`）。携带特定 Account 的请求，Resin 会优先为其分配稳定的出口节点；当节点不可用时，会重试并优先切换到同 IP 节点，以降低业务侧适配成本。
+- **账号 (Account)**：业务侧的唯一标识（如 `Tom` 或 `user_1`）。携带特定 Account 的请求，Resin-next 会优先为其分配稳定的出口节点；当节点不可用时，会重试并优先切换到同 IP 节点，以降低业务侧适配成本。
 
 ### 粘性代理接入格式
 
@@ -202,7 +204,7 @@ HTTP 正向代理与 SOCKS5 正向代理共用同一套身份格式：`Platform.
 直接将身份信息写入代理认证中即可：
 
 ```bash
-# HTTP 正向代理：指定业务账号 user_tom，Resin 会为其长期分配一个稳定的专属 IP
+# HTTP 正向代理：指定业务账号 user_tom，Resin-next 会为其长期分配一个稳定的专属 IP
 curl -x http://127.0.0.1:2260 \
   -U "Default.user_tom:my-token" \
   https://api.ipify.org
@@ -216,7 +218,7 @@ curl --proxy socks5h://127.0.0.1:2260 \
 ```
 
 #### 方式二：反向代理接入（URL 携带 Account，适合简单使用/手动调试）
-你可以通过替换业务的 BaseURL 为 Resin 反代地址，将请求直接发给 Resin。
+你可以通过替换业务的 BaseURL 为 Resin-next 反代地址，将请求直接发给 Resin-next。
 URL 格式进阶为：`http://部署IP:2260/密码/平台.账号/协议/目标地址`：
 
 ```bash
@@ -241,24 +243,24 @@ curl "http://127.0.0.1:2260/my-token/MyPlatform/https/api.example.com/v1/orders"
 ```
 
 #### 方式四：反向代理接入 + 请求头规则（零侵入/低侵入集成）
-如果你的客户端不方便设置 `X-Resin-Account`，但业务请求本身已经有稳定身份头（例如发给目标网站的 API Key、Token、Cookie 等），Resin 也可以通过“请求头提取规则”自动提取 Account。
+如果你的客户端不方便设置 `X-Resin-Account`，但业务请求本身已经有稳定身份头（例如发给目标网站的 API Key、Token、Cookie 等），Resin-next 也可以通过“请求头提取规则”自动提取 Account。
 
 假设你的服务本来每次请求目标 API 时，都会携带 `Authorization` 请求头：
 
 1. 在管理页面修改 Platform 的配置，把 “反向代理账号为空行为” 修改为 “提取指定请求头作为 Account”。
 2. 在 “用于提取 Account 的 Headers” 输入 `Authorization`。
 
-此时，就算你在反向代理 URL 里不填 `Account`，Resin 也会在流量经过时读取并解析该 Header。例如：
+此时，就算你在反向代理 URL 里不填 `Account`，Resin-next 也会在流量经过时读取并解析该 Header。例如：
 
 ```bash
 curl "http://127.0.0.1:2260/my-token/MyPlatform/https/api.example.com/v1/orders" \
   -H "Authorization: sk-abc123"
 ```
 
-上面的请求中，Resin 发现 sk-abc123 后，会将其作为 Account。后续只要带着同一把 API Key 的请求，会优先保持在同一个出口 IP 上。
+上面的请求中，Resin-next 发现 sk-abc123 后，会将其作为 Account。后续只要带着同一把 API Key 的请求，会优先保持在同一个出口 IP 上。
 
 > [!TIP]
-> 除了 Platform 请求头配置外，Resin 还支持更高级的根据 URL 前缀决定请求头的高级功能！尝试把当前文档与 [DESIGN.md](DESIGN.md) 扔给 AI，问它 “请使用简单易懂的语言，向我介绍 Resin 指定请求头提取规则的两种方式，尤其是根据 URL 前缀决定请求头的方式。”
+> 除了 Platform 请求头配置外，Resin-next 还支持更高级的根据 URL 前缀决定请求头的高级功能！尝试把当前文档与 [DESIGN.md](DESIGN.md) 扔给 AI，问它 “请使用简单易懂的语言，向我介绍 Resin-next 指定请求头提取规则的两种方式，尤其是根据 URL 前缀决定请求头的方式。”
 
 > 请仅在具备合法处理依据（如用户授权、合同约定或其他适用法律基础）时启用请求头提取，并确保你的日志留存与访问控制策略符合所在地法律法规及目标服务条款。
 
@@ -266,7 +268,7 @@ curl "http://127.0.0.1:2260/my-token/MyPlatform/https/api.example.com/v1/orders"
 
 ## 🤖 接入第三方项目
 
-各类第三方客户端使用 Resin 的方式有所不同，对于业务代码的侵入程度也不同，总结如下：
+各类第三方客户端使用 Resin-next 的方式有所不同，对于业务代码的侵入程度也不同，总结如下：
 
 💡 **如果你不需要粘性代理**
 
@@ -281,10 +283,10 @@ curl "http://127.0.0.1:2260/my-token/MyPlatform/https/api.example.com/v1/orders"
 | :--- | :--- | :--- |
 | 接入正向代理 | 🟡 **中侵入** | 需稍微修改代码：为不同用户附带不同认证信息。HTTP 与 SOCKS5 都可使用 `平台.账号:密码`。 |
 | 接入反向代理 | 🟡 **中侵入** | 需稍微修改代码：加入 `X-Resin-Account` 请求头或动态拼接带有账号的反代 URL 路径。 |
-| 接入反向代理 + 请求头规则 | 🟢 **零/低侵入** | Resin 允许通过识别业务原始头（如 `Authorization`）自动提取 Account 并进行粘性路由绑定，接入方式与非粘性反代接近。 |
+| 接入反向代理 + 请求头规则 | 🟢 **零/低侵入** | Resin-next 允许通过识别业务原始头（如 `Authorization`）自动提取 Account 并进行粘性路由绑定，接入方式与非粘性反代接近。 |
 
 👉 **极速集成脚本/提示词（Prompt）：**  
-如果你是开发者，想要修改现有项目原生接入 Resin 粘性代理，你可以直接把下面这个模板喂给 AI 帮你写代码：
+如果你是开发者，想要修改现有项目原生接入 Resin-next 粘性代理，你可以直接把下面这个模板喂给 AI 帮你写代码：
 - [doc/integration-prompt.md](doc/integration-prompt.md)
 
 ---
@@ -326,7 +328,7 @@ RESIN_PORT=2260
 前提条件：请确保环境中已安装 Go 1.25+ 和 Node.js。
 
 ```bash
-# 1. 下载 Resin 源码
+# 1. 下载 Resin-next 源码
 git clone https://github.com/Resinat/Resin.git
 
 # 2. 编译 WebUI
@@ -354,7 +356,7 @@ RESIN_PORT=2260 \
 ## 🛠️ 常见错误 (FAQ)
 
 - **Q: 如何让内网或本机目标不走代理节点？**
-  - **A**: 配置 `RESIN_PROXY_BYPASS`，用分号、逗号或换行分隔规则。命中的请求会由 Resin 本机直连目标，而不是通过代理节点。例如：`RESIN_PROXY_BYPASS="localhost;127.*;10.*;172.16.0.0/12;192.168.*;<local>"`。规则支持精确主机、`*`/`?` 通配符、CIDR 网段，以及表示无点号本地域名的 `<local>`。
+  - **A**: 配置 `RESIN_PROXY_BYPASS`，用分号、逗号或换行分隔规则。命中的请求会由 Resin-next 本机直连目标，而不是通过代理节点。例如：`RESIN_PROXY_BYPASS="localhost;127.*;10.*;172.16.0.0/12;192.168.*;<local>"`。规则支持精确主机、`*`/`?` 通配符、CIDR 网段，以及表示无点号本地域名的 `<local>`。
 - **Q: 启动失败提示 `RESIN_PROXY_TOKEN` 未定义？**
   - **A**: 就算你不打算启用代理密码，也必须显式配置它为空：`RESIN_PROXY_TOKEN=""`。如果你的 shell 会丢弃空环境变量，请创建 `.env` 文件并写入 `RESIN_PROXY_TOKEN=`。
 - **Q: 为什么配置 `RESIN_AUTH_VERSION=LEGACY_V0` 会启动失败？**
@@ -362,7 +364,7 @@ RESIN_PORT=2260 \
 - **Q: 为什么 SOCKS5 客户端连不上？**
   - **A**: 若 `RESIN_PROXY_TOKEN` 非空，客户端需要发送 SOCKS5 用户名密码认证；若它被显式设为空字符串，则也允许 `NO AUTH`。
 - **Q: 使用反向代理 WebSocket 协议（如 ws/wss）怎么写路径？**
-  - **A**: 目标无论是不是 ws/wss，URL 路径里的协议字段**依然只能写 `http` 或 `https`**（不能写 ws/wss）。Resin 会自动探测并完成 WebSocket 协议升级（Upgrade）。
+  - **A**: 目标无论是不是 ws/wss，URL 路径里的协议字段**依然只能写 `http` 或 `https`**（不能写 ws/wss）。Resin-next 会自动探测并完成 WebSocket 协议升级（Upgrade）。
 
 ---
 

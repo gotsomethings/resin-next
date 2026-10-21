@@ -1,7 +1,7 @@
 import type { AppLocale } from "./locale";
 
-export const APP_TITLE_ZH = "Resin · 高性能粘性代理池";
-const APP_TITLE_EN = "Resin · Sticky Proxy Pool";
+export const APP_TITLE_ZH = "Resin-next · 高性能粘性代理池";
+const APP_TITLE_EN = "Resin-next · Sticky Proxy Pool";
 
 const EXACT_ZH_TO_EN: Record<string, string> = {
   "如 13335 或 Cloudflare": "e.g. 13335 or Cloudflare",
@@ -25,7 +25,7 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "当前生效值": "Currently in effect",
   "未开启探测，这些维度不会生效": "Probing is off, so these dimensions will not take effect",
   "近 24 小时探测通过率（按小时桶滚动，无样本时不限制）": "Probe pass rate over the last 24h (hourly buckets; not enforced when there are no samples)",
-  "Resin · 高性能粘性代理池": APP_TITLE_EN,
+  "Resin-next · 高性能粘性代理池": APP_TITLE_EN,
   "高性能粘性代理池 · 管理面板": "High-performance sticky proxy pool · Admin Console",
   "主导航": "Main Navigation",
   "切换语言": "Switch Language",
@@ -80,11 +80,11 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "强制客户端认证": "Require Client Authentication",
   "认证策略": "Authentication Policy",
   [`一些应用（例如浏览器）只有在代理服务器强制要求认证的时候，才会发送认证信息。
-因此，当 Resin 没有设置代理令牌时，这些应用不会向 Resin 发送认证字段，导致平台与账号信息缺失。
-如果你的 Resin 部署没有设置代理令牌，同时又需要兼容这些应用，可以开启此选项。
+因此，当 Resin-next 没有设置代理令牌时，这些应用不会向 Resin-next 发送认证字段，导致平台与账号信息缺失。
+如果你的 Resin-next 部署没有设置代理令牌，同时又需要兼容这些应用，可以开启此选项。
 注意：开启后，如果客户端没有发送认证信息，平台不再被视为 Default，而是拒绝请求。`]: `Some applications, such as browsers, send authentication information only when the proxy server explicitly requires authentication.
-Therefore, when Resin has no proxy token configured, these applications do not send authentication fields to Resin, resulting in missing platform and account information.
-If your Resin deployment has no proxy token configured and needs to support these applications, enable this option.
+Therefore, when Resin-next has no proxy token configured, these applications do not send authentication fields to Resin-next, resulting in missing platform and account information.
+If your Resin-next deployment has no proxy token configured and needs to support these applications, enable this option.
 Note: Once enabled, requests without authentication information are rejected instead of being treated as Default platform requests.`,
   "监听错误：{{message}}": "Listener error: {{message}}",
   "端口必须是 1 到 65535 之间的整数": "Port must be an integer between 1 and 65535",
@@ -410,7 +410,7 @@ Note: Once enabled, requests without authentication information are rejected ins
   "报文内容": "Payload",
   "诊断": "Diagnostics",
   "目标与节点": "Target and Node",
-  "Resin 错误:": "Resin Error:",
+  "Resin-next 错误:": "Resin-next Error:",
   "失败阶段:": "Failure Stage:",
   "错误类型:": "Error Type:",
   "错误详情:": "Error Details:",
@@ -615,8 +615,8 @@ Note: Once enabled, requests without authentication information are rejected ins
     "Current browser does not support DecompressionStream; automatic decompression is unavailable.",
   "当前实时日志记录已开启": "Realtime request logging is enabled",
   "当前实时日志记录未开启": "Realtime request logging is disabled",
-  "登录失败：无法连接 API。请确认 Resin 在 2260 端口运行，并使用 `npm run dev`（含 /api 代理）启动前端。":
-    "Login failed: unable to connect to API. Ensure Resin runs on port 2260 and frontend is started with `npm run dev` (with /api proxy).",
+  "登录失败：无法连接 API。请确认 Resin-next 在 2260 端口运行，并使用 `npm run dev`（含 /api 代理）启动前端。":
+    "Login failed: unable to connect to API. Ensure Resin-next runs on port 2260 and frontend is started with `npm run dev` (with /api proxy).",
   '兜底规则 "*" 不可删除': 'Fallback rule "*" cannot be deleted',
   '兜底规则 "*" 不允许删除': 'Fallback rule "*" cannot be deleted',
   '兜底规则 "*" 仅允许编辑，不允许删除。':

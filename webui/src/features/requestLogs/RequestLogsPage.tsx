@@ -1041,7 +1041,7 @@ export function RequestLogsPage() {
                       <tbody>
                         {detailLog.resin_error ? (
                           <tr>
-                            <td style={{ color: "var(--danger)", fontWeight: 600, paddingBottom: "8px", paddingRight: "16px", whiteSpace: "nowrap", verticalAlign: "top", width: "1%" }}>{t("Resin 错误:")}</td>
+                            <td style={{ color: "var(--danger)", fontWeight: 600, paddingBottom: "8px", paddingRight: "16px", whiteSpace: "nowrap", verticalAlign: "top", width: "1%" }}>{t("Resin-next 错误:")}</td>
                             <td style={{ color: "var(--text)", paddingBottom: "8px", wordBreak: "break-all", verticalAlign: "top" }}>{detailLog.resin_error}</td>
                           </tr>
                         ) : null}

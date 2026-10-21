@@ -88,11 +88,11 @@ export function AppShell() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo" aria-hidden="true">
-            <img src={logoSrc} alt="Resin Logo" style={{ width: 20, height: 20 }} />
+            <img src={logoSrc} alt="Resin-next Logo" style={{ width: 20, height: 20 }} />
           </div>
           <div className="brand-copy">
             <div className="brand-title-row">
-              <p className="brand-title">Resin</p>
+              <p className="brand-title">Resin-next</p>
               {version ? (
                 <span className="brand-version" title={version} aria-label={`Version ${version}`}>
                   {version}
