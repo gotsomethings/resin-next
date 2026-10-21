@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/Input";
 import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { listPlatformEgress, updatePlatform } from "./api";
+import { getGeoIPStatus } from "../geoip/api";
 import type { EgressIPRow, Platform, PlatformExtras, PlatformUpdateInput } from "./types";
 
 type Props = { platform: Platform };
@@ -119,6 +120,14 @@ export function PlatformPolicyPanel({ platform }: Props) {
     enabled: Boolean(platform.id),
     refetchInterval: 15000,
   });
+
+  // ASN / IP-type dimensions only work when the backend has an ASN database.
+  const geoipStatusQuery = useQuery({
+    queryKey: ["geoip-status"],
+    queryFn: getGeoIPStatus,
+    staleTime: 60000,
+  });
+  const asnAvailable = geoipStatusQuery.data?.asn_available ?? false;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -448,21 +457,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
 
           <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("出口国家")}</label>
-            <Input
-              value={form.egress_country_filters}
-              onChange={(e) => setForm({ ...form, egress_country_filters: e.target.value })}
-            />
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("逗号分隔，如 jp,us；! 前缀排除")}</p>
-          </div>
-
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("ASN")}</label>
-            <Input value={form.asn_filters} onChange={(e) => setForm({ ...form, asn_filters: e.target.value })} />
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("如 as123,!as456；需 ASN 库")}</p>
-          </div>
-
-          <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("IP 类型")}</label>
             <Select
               value={form.ip_type_filters}
@@ -475,6 +469,32 @@ export function PlatformPolicyPanel({ platform }: Props) {
               <option value="!residential">{t("非住宅")}</option>
             </Select>
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("按 ASN 组织名启发式判定")}</p>
+            {!asnAvailable && (
+              <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>
+                {t("需 ASN 库；当前未安装，此维度不生效")}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("ASN")}</label>
+            <Input value={form.asn_filters} onChange={(e) => setForm({ ...form, asn_filters: e.target.value })} />
+            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("如 as123,!as456；需 ASN 库")}</p>
+            {!asnAvailable && (
+              <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>
+                {t("需 ASN 库；当前未安装，此维度不生效")}
+              </p>
+            )}
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("出口国家")}</label>
+            <Input
+              style={{ width: "100%" }}
+              value={form.egress_country_filters}
+              onChange={(e) => setForm({ ...form, egress_country_filters: e.target.value })}
+            />
+            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("逗号分隔，如 jp,us；! 前缀排除")}</p>
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>

@@ -377,12 +377,10 @@ func (p *Platform) evaluateNode(
 	}
 
 	// 14/15. ASN and IP type.
-	if len(pol.ASNFilters) > 0 || len(pol.IPTypeFilters) > 0 {
-		var info ASNInfo
-		ok := false
-		if p.ASNLookup != nil {
-			info, ok = p.ASNLookup(egressIP)
-		}
+	// Without an ASN database these dimensions cannot be evaluated; treating every
+	// node as a mismatch would empty the platform, so they simply do not apply.
+	if p.ASNLookup != nil && (len(pol.ASNFilters) > 0 || len(pol.IPTypeFilters) > 0) {
+		info, ok := p.ASNLookup(egressIP)
 		if !MatchASNFilter(info, ok, pol.ASNFilters) {
 			return false
 		}

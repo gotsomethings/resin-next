@@ -427,6 +427,33 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		MatcherRuntime: a.accountMatcher,
 	}
 
+	// ASN-based dimensions (asn_filters / ip_type_filters) need the ASN database.
+	// evaluateNode deliberately treats them as inactive when no lookup is wired,
+	// so a platform configured with them silently filters on nothing. Say which.
+	asnReady := false
+	if cpService.ASN != nil {
+		if loaded, _, _ := cpService.ASN.Status(); loaded {
+			asnReady = true
+		}
+	}
+	if !asnReady {
+		if platforms, err := engine.ListPlatforms(); err == nil {
+			for _, pl := range platforms {
+				var dims []string
+				if len(pl.ASNFilters) > 0 {
+					dims = append(dims, "asn_filters")
+				}
+				if len(pl.IPTypeFilters) > 0 {
+					dims = append(dims, "ip_type_filters")
+				}
+				if len(dims) > 0 {
+					log.Printf("WARN platform %q (%s): ASN database unavailable, so %v has no effect (dimensions skipped)",
+						pl.Name, pl.ID, dims)
+				}
+			}
+		}
+	}
+
 	verdictStore.SetCallbacks(
 		func(platformID, ip string) {
 			if n := cpService.EvictLeasesForIP(platformID, ip); n > 0 {

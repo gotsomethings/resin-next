@@ -15,6 +15,7 @@ export async function getGeoIPStatus(): Promise<GeoIPStatus> {
   return {
     db_mtime: data.db_mtime || "",
     next_scheduled_update: data.next_scheduled_update || "",
+    asn_available: Boolean(data.asn_available),
   };
 }
 

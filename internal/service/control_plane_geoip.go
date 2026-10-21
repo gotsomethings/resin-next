@@ -13,6 +13,7 @@ import (
 type GeoIPStatus struct {
 	DBMtime             string `json:"db_mtime"`
 	NextScheduledUpdate string `json:"next_scheduled_update"`
+	ASNAvailable        bool   `json:"asn_available"`
 }
 
 // GetGeoIPStatus returns the current GeoIP status.
@@ -21,6 +22,11 @@ func (s *ControlPlaneService) GetGeoIPStatus() GeoIPStatus {
 	if t := s.GeoIP.LastUpdated(); !t.IsZero() {
 		status.DBMtime = t.UTC().Format(time.RFC3339Nano)
 	}
+	if s.ASN != nil {
+		loaded, _, _ := s.ASN.Status()
+		status.ASNAvailable = loaded
+	}
+
 	if t := s.GeoIP.NextScheduledUpdate(); !t.IsZero() {
 		status.NextScheduledUpdate = t.UTC().Format(time.RFC3339Nano)
 	}
