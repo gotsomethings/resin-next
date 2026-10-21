@@ -4,7 +4,6 @@ import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
 import { Switch } from "../../components/ui/Switch";
 import { Textarea } from "../../components/ui/Textarea";
-import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
@@ -192,18 +191,14 @@ export function PlatformPolicyPanel({ platform }: Props) {
     });
 
   return (
-    <div className="platform-policy-panel" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="platform-detail-tabpanel platform-ops-tabpanel">
       {notice ? (
         <p className="muted" style={{ marginTop: 0, fontSize: 12, lineHeight: 1.4 }}>{notice}</p>
       ) : null}
 
-      <Card>
-        <div className="detail-header">
-          <div>
-            <h3>{t("探测配置")}</h3>
-            <p>{t("用该平台自己的请求模板探测出口 IP，结果归属该 IP。")}</p>
-          </div>
-        </div>
+      <section className="syscfg-section">
+        <h4>{t("探测配置")}</h4>
+        <p className="muted">{t("用该平台自己的请求模板探测出口 IP，结果归属该 IP。")}</p>
 
         <div
           style={{
@@ -300,15 +295,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("绝不整池扫")}</p>
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <div className="detail-header">
-          <div>
-            <h3>{t("判决与黑名单")}</h3>
-            <p>{t("连续失败即拉黑该出口 IP，并在本平台路由中剔除。")}</p>
-          </div>
-        </div>
+      <section className="syscfg-section">
+        <h4>{t("判决与黑名单")}</h4>
+        <p className="muted">{t("连续失败即拉黑该出口 IP，并在本平台路由中剔除。")}</p>
 
         <div
           style={{
@@ -357,15 +348,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 3 次，中间失败即重计")}</p>
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <div className="detail-header">
-          <div>
-            <h3>{t("筛选增强")}</h3>
-            <p>{t("全部 AND 叠加；不填即不限制。")}</p>
-          </div>
-        </div>
+      <section className="syscfg-section">
+        <h4>{t("筛选增强")}</h4>
+        <p className="muted">{t("全部 AND 叠加；不填即不限制。")}</p>
 
         <div
           style={{
@@ -511,15 +498,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
             {t("未开启探测，这些维度不会生效")}
           </p>
         ) : null}
-      </Card>
+      </section>
 
-      <Card>
-        <div className="detail-header">
-          <div>
-            <h3>{t("换路设置")}</h3>
-            <p>{t("仅连接阶段失败时换节点；已建立的传输不重试。")}</p>
-          </div>
-        </div>
+      <section className="syscfg-section">
+        <h4>{t("换路设置")}</h4>
+        <p className="muted">{t("仅连接阶段失败时换节点；已建立的传输不重试。")}</p>
 
         <div
           style={{
@@ -574,15 +557,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("当前仅实现 connect")}</p>
           </div>
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <div className="detail-header">
-          <div>
-            <h3>{t("出口 IP 台账")}</h3>
-            <p>{t("每个出口 IP 的状态、失败计数与洗白进度。")}</p>
-          </div>
-        </div>
+      <section className="syscfg-section">
+        <h4>{t("出口 IP 台账")}</h4>
+        <p className="muted">{t("每个出口 IP 的状态、失败计数与洗白进度。")}</p>
 
         <div className="policy-toolbar" style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>
           <div>
@@ -647,7 +626,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
             </table>
           </div>
         ) : null}
-      </Card>
+      </section>
 
       <div
         style={{
