@@ -217,11 +217,13 @@ function getNodeDisplayStatus(node: NodeSummary): NodeDisplayStatus {
   if (!node.has_outbound) {
     return "error";
   }
-  if (isPendingTestNode(node)) {
-    return "pending_test";
-  }
+  // Circuit-open outranks never-probed: a tripped breaker needs attention even
+  // if the node has no probe samples yet.
   if (node.circuit_open_since) {
     return "circuit_open";
+  }
+  if (isPendingTestNode(node)) {
+    return "pending_test";
   }
   return "healthy";
 }
