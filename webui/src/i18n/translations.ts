@@ -4,6 +4,7 @@ export const APP_TITLE_ZH = "Resin · 高性能粘性代理池";
 const APP_TITLE_EN = "Resin · Sticky Proxy Pool";
 
 const EXACT_ZH_TO_EN: Record<string, string> = {
+  "自动模式：由资源治理器按压力动态调整，切到固定模式后可手动设置": "Auto mode: the resource governor adjusts concurrency dynamically; switch to fixed to set it manually",
   "探测并发治理": "Probe concurrency governance",
   "探测并发设定值": "Probe concurrency limit",
   "并发模式": "Concurrency mode",

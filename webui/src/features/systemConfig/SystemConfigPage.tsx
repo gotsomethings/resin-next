@@ -241,7 +241,14 @@ function buildPatch(current: RuntimeConfig, next: RuntimeConfig): RuntimeConfigP
   const patch: RuntimeConfigPatch = {};
   const patchMutable = patch as Record<string, unknown>;
 
+  // In auto mode the limit is a ceiling owned by the governor; never echo a
+  // stale form value back as if the user had just edited it.
+  const autoMode = next.probe_concurrency_mode === "auto";
+
   for (const field of EDITABLE_FIELDS) {
+    if (autoMode && field === "probe_concurrency") {
+      continue;
+    }
     const currentValue = current[field];
     const nextValue = next[field];
 
@@ -525,7 +532,7 @@ export function SystemConfigPage() {
 
                       </label>
 
-                      {renderRestoreButton("probe_concurrency")}
+                      {form.probe_concurrency_mode === "fixed" ? renderRestoreButton("probe_concurrency") : null}
 
                     </div>
 
@@ -541,10 +548,18 @@ export function SystemConfigPage() {
 
                       value={form.probe_concurrency}
 
+                      disabled={form.probe_concurrency_mode === "auto"}
+
                       onChange={(event) => setFormField("probe_concurrency", event.target.value)}
 
                     />
 
+
+                    {form.probe_concurrency_mode === "auto" ? (
+                      <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85em" }}>
+                        {t("自动模式：由资源治理器按压力动态调整，切到固定模式后可手动设置")}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="field-group">
