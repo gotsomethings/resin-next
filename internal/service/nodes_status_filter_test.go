@@ -96,3 +96,53 @@ func hashSet(nodes []NodeSummary) map[string]bool {
 	}
 	return set
 }
+
+// The UI is single-choice: picking one status must never return the other
+// class, while a node that is both shows up under either pick.
+func TestListNodes_CircuitOpenPendingTestAreExclusive(t *testing.T) {
+	cp, pool, sub := newASNTestService(t)
+
+	circuitOnly := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"9.9.9.9","port":443}`), "203.0.113.20")
+	pendingOnly := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"9.9.9.10","port":443}`), "203.0.113.21")
+	both := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"9.9.9.11","port":443}`), "203.0.113.22")
+
+	e, _ := pool.GetEntry(circuitOnly)
+	e.LastProbeAttempt.Store(time.Now().UnixNano())
+	e.CircuitOpenSince.Store(time.Now().UnixNano())
+
+	e, _ = pool.GetEntry(pendingOnly)
+	e.LastProbeAttempt.Store(0)
+
+	e, _ = pool.GetEntry(both)
+	e.LastProbeAttempt.Store(0)
+	e.CircuitOpenSince.Store(time.Now().UnixNano())
+
+	yes := true
+
+	circuitHits, err := cp.ListNodes(NodeFilters{CircuitOpen: &yes})
+	if err != nil {
+		t.Fatalf("circuit_open=true: %v", err)
+	}
+	circuitSet := hashSet(circuitHits)
+	if circuitSet[pendingOnly.Hex()] {
+		t.Fatal("a purely pending node must not match circuit_open=true")
+	}
+	if !circuitSet[circuitOnly.Hex()] || !circuitSet[both.Hex()] {
+		t.Fatalf("circuit_open=true missing expected nodes: %v", circuitSet)
+	}
+
+	pendingHits, err := cp.ListNodes(NodeFilters{PendingTest: &yes})
+	if err != nil {
+		t.Fatalf("pending_test=true: %v", err)
+	}
+	pendingSet := hashSet(pendingHits)
+	if pendingSet[circuitOnly.Hex()] {
+		t.Fatal("a purely circuit-open node must not match pending_test=true")
+	}
+	if !pendingSet[pendingOnly.Hex()] || !pendingSet[both.Hex()] {
+		t.Fatalf("pending_test=true missing expected nodes: %v", pendingSet)
+	}
+}

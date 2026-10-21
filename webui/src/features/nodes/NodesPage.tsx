@@ -8,7 +8,6 @@ import { Button } from "../../components/ui/Button";
 import { DataTable } from "../../components/ui/DataTable";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
-import { Switch } from "../../components/ui/Switch";
 import { OffsetPagination } from "../../components/ui/OffsetPagination";
 import { Select } from "../../components/ui/Select";
 import { ToastContainer } from "../../components/ui/Toast";
@@ -24,7 +23,7 @@ import type { NodeSummary } from "./types";
 import { getAllRegions, getRegionName } from "./regions";
 import type { NodeListFilters, NodeSortBy, SortOrder } from "./types";
 
-type NodeStatusFilter = "all" | "healthy" | "error" | "disabled";
+type NodeStatusFilter = "all" | "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
 type NodeDisplayStatus = "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
 type ProbeAction = "egress" | "latency";
 
@@ -35,9 +34,6 @@ type NodeFilterDraft = {
   region: string;
   egress_ip: string;
   asn: string;
-  /** Independent switches; both on means union (OR), not intersection. */
-  circuit_open: boolean;
-  pending_test: boolean;
   status: NodeStatusFilter;
 };
 
@@ -48,8 +44,6 @@ const defaultFilterDraft: NodeFilterDraft = {
   region: "",
   egress_ip: "",
   asn: "",
-  circuit_open: false,
-  pending_test: false,
   status: "all",
 };
 
@@ -92,7 +86,7 @@ function parseStatusParam(value: string | null): NodeStatusFilter | undefined {
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "all" || normalized === "healthy" || normalized === "error" || normalized === "disabled") {
+  if (normalized === "all" || normalized === "healthy" || normalized === "circuit_open" || normalized === "pending_test" || normalized === "error" || normalized === "disabled") {
     return normalized;
   }
 
@@ -103,6 +97,14 @@ function statusFromQuery(params: URLSearchParams): NodeStatusFilter {
   const explicitStatus = parseStatusParam(params.get("status"));
   if (explicitStatus) {
     return explicitStatus;
+  }
+
+  // Legacy deep links carried bare booleans instead of a status value.
+  if (parseBoolParam(params.get("pending_test")) === true) {
+    return "pending_test";
+  }
+  if (parseBoolParam(params.get("circuit_open")) === true) {
+    return "circuit_open";
   }
 
   const hasOutbound = parseBoolParam(params.get("has_outbound"));
@@ -128,7 +130,6 @@ function trimQueryValue(params: URLSearchParams, key: string): string {
 function draftFromQuery(search: string): NodeFilterDraft {
   const params = new URLSearchParams(search);
   const tagKeyword = trimQueryValue(params, "tag_keyword") || trimQueryValue(params, "tag");
-  const legacyStatus = params.get("status")?.trim().toLowerCase() ?? "";
 
   return {
     platform_id: trimQueryValue(params, "platform_id"),
@@ -137,8 +138,6 @@ function draftFromQuery(search: string): NodeFilterDraft {
     region: trimQueryValue(params, "region").toUpperCase(),
     egress_ip: trimQueryValue(params, "egress_ip"),
     asn: trimQueryValue(params, "asn"),
-    circuit_open: parseBoolParam(params.get("circuit_open")) === true || legacyStatus === "circuit_open",
-    pending_test: parseBoolParam(params.get("pending_test")) === true || legacyStatus === "pending_test",
     status: statusFromQuery(params),
   };
 }
@@ -146,28 +145,53 @@ function draftFromQuery(search: string): NodeFilterDraft {
 
 
 function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
+  let circuit_open: boolean | undefined = undefined;
+  let pending_test: boolean | undefined = undefined;
   let has_outbound: boolean | undefined = undefined;
   let enabled: boolean | undefined = undefined;
 
+  // One status value is active at a time, so every branch resets both breaker
+  // fields explicitly — nothing leaks over from the previous selection.
   switch (draft.status) {
     case "healthy":
       enabled = true;
       has_outbound = true;
+      circuit_open = false;
+      pending_test = undefined;
+      break;
+    case "circuit_open":
+      enabled = undefined;
+      has_outbound = undefined;
+      circuit_open = true;
+      pending_test = undefined;
+      break;
+    case "pending_test":
+      enabled = undefined;
+      has_outbound = undefined;
+      circuit_open = undefined;
+      pending_test = true;
       break;
     case "error":
       enabled = true;
       has_outbound = false;
+      circuit_open = undefined;
+      pending_test = undefined;
       break;
     case "disabled":
       enabled = false;
+      has_outbound = undefined;
+      circuit_open = undefined;
+      pending_test = undefined;
       break;
     case "all":
     default:
+      enabled = undefined;
+      has_outbound = undefined;
+      circuit_open = undefined;
+      pending_test = undefined;
       break;
   }
 
-  // The two switches are independent: only set them when on, so an off switch
-  // means "no filter" rather than "must not be circuit-open / pending".
   return {
     platform_id: draft.platform_id,
     subscription_id: draft.subscription_id,
@@ -177,9 +201,46 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
     asn: draft.asn,
     enabled,
     has_outbound,
-    circuit_open: draft.circuit_open ? true : undefined,
-    pending_test: draft.pending_test ? true : undefined,
+    circuit_open,
+    pending_test,
   };
+}
+
+const URL_FILTER_KEYS = [
+  "platform_id",
+  "subscription_id",
+  "tag_keyword",
+  "tag",
+  "region",
+  "egress_ip",
+  "asn",
+  "status",
+  "enabled",
+  "has_outbound",
+  "circuit_open",
+  "pending_test",
+] as const;
+
+// Keep the address bar in step with the filter panel so a filtered view can be
+// bookmarked. Only our own keys are rewritten; anything else is preserved.
+function syncUrlFromDraft(draft: NodeFilterDraft): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  for (const key of URL_FILTER_KEYS) {
+    params.delete(key);
+  }
+  if (draft.platform_id) params.set("platform_id", draft.platform_id);
+  if (draft.subscription_id) params.set("subscription_id", draft.subscription_id);
+  if (draft.tag_keyword) params.set("tag_keyword", draft.tag_keyword);
+  if (draft.region) params.set("region", draft.region);
+  if (draft.egress_ip) params.set("egress_ip", draft.egress_ip);
+  if (draft.asn) params.set("asn", draft.asn);
+  if (draft.status !== "all") params.set("status", draft.status);
+
+  const search = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
 }
 
 function firstTag(node: { display_tag?: string; tags: { tag: string }[] }): string {
@@ -492,10 +553,11 @@ export function NodesPage() {
     }
   };
 
-  const handleFilterChange = (key: keyof NodeFilterDraft, value: string | boolean) => {
+  const handleFilterChange = (key: keyof NodeFilterDraft, value: string) => {
     setDraftFilters((prev) => {
-      const next = { ...prev, [key]: value } as NodeFilterDraft;
+      const next = { ...prev, [key]: value };
       setActiveFilters(draftToActiveFilters(next));
+      syncUrlFromDraft(next);
       setSelectedNodeHash("");
       setDrawerOpen(false);
       setPage(0);
@@ -506,6 +568,7 @@ export function NodesPage() {
   const resetFilters = () => {
     setDraftFilters(defaultFilterDraft);
     setActiveFilters(draftToActiveFilters(defaultFilterDraft));
+    syncUrlFromDraft(defaultFilterDraft);
     setSelectedNodeHash("");
     setDrawerOpen(false);
     setPage(0);
@@ -823,35 +886,11 @@ export function NodesPage() {
               >
                 <option value="all">{t("全部")}</option>
                 <option value="healthy">{t("健康")}</option>
+                <option value="circuit_open">{t("熔断")}</option>
+                <option value="pending_test">{t("待测")}</option>
                 <option value="error">{t("错误")}</option>
                 <option value="disabled">{t("禁用")}</option>
               </Select>
-            </div>
-
-            <div style={{ ...NODE_FILTER_ITEM_STYLE, flex: "0 0 auto", minWidth: "72px" }}>
-              <label htmlFor="node-circuit-open" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                {t("熔断")}
-              </label>
-              <div style={{ display: "flex", alignItems: "center", height: "32px" }}>
-                <Switch
-                  id="node-circuit-open"
-                  checked={draftFilters.circuit_open}
-                  onChange={(event) => handleFilterChange("circuit_open", event.target.checked)}
-                />
-              </div>
-            </div>
-
-            <div style={{ ...NODE_FILTER_ITEM_STYLE, flex: "0 0 auto", minWidth: "72px" }}>
-              <label htmlFor="node-pending-test" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                {t("待测")}
-              </label>
-              <div style={{ display: "flex", alignItems: "center", height: "32px" }}>
-                <Switch
-                  id="node-pending-test"
-                  checked={draftFilters.pending_test}
-                  onChange={(event) => handleFilterChange("pending_test", event.target.checked)}
-                />
-              </div>
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.125rem", marginLeft: "auto" }}>
