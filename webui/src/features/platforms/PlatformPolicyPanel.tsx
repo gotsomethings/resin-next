@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui/Button";
+import { Select } from "../../components/ui/Select";
+import { Switch } from "../../components/ui/Switch";
+import { Textarea } from "../../components/ui/Textarea";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { useI18n } from "../../i18n";
@@ -189,129 +192,316 @@ export function PlatformPolicyPanel({ platform }: Props) {
     });
 
   return (
-    <Card className="platform-policy-panel">
-      <div className="card-header">
-        <h3>{t("探测与策略")}</h3>
-        <Button variant="primary" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-          {saveMutation.isPending ? t("保存中...") : t("保存策略")}
-        </Button>
-      </div>
-      {notice ? <p className="muted">{notice}</p> : null}
+    <div className="platform-policy-panel" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {notice ? (
+        <Card>
+          <p className="muted" style={{ margin: 0 }}>{notice}</p>
+          <div style={{ marginTop: 12 }}>
+            <Button variant="primary" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? t("保存中...") : t("保存策略")}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
-      <section className="syscfg-section" style={{ marginBottom: 20 }}>
-        <h4>{t("探测配置")}</h4>
-        <div className="field-group">
-          <span className="field-label">{t("启用探测")}</span>
-          <input
-          type="checkbox"
-          checked={form.probe_enabled}
-          onChange={(e) => setForm({ ...form, probe_enabled: e.target.checked })}
-          />
+      <Card>
+        <div className="detail-header">
+          <div>
+            <h3>{t("探测配置")}</h3>
+            <p>{t("用该平台自己的请求模板探测出口 IP，结果归属该 IP。")}</p>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? t("保存中...") : t("保存策略")}
+          </Button>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("探测 URL")}</span>
-          <Input value={form.probe_url} onChange={(e) => setForm({ ...form, probe_url: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("方法")}</span>
-          <Input value={form.probe_method} onChange={(e) => setForm({ ...form, probe_method: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("请求头（一行一个）")}</span>
-          <textarea
-          value={form.probe_headers}
-          onChange={(e) => setForm({ ...form, probe_headers: e.target.value })}
-          rows={3}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("请求体")}</span>
-          <textarea
-          value={form.probe_body}
-          onChange={(e) => setForm({ ...form, probe_body: e.target.value })}
-          rows={4}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("通过状态码（逗号分隔）")}</span>
-          <Input
-          value={form.probe_pass_status}
-          onChange={(e) => setForm({ ...form, probe_pass_status: e.target.value })}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("跟随重定向")}</span>
-          <input
-          type="checkbox"
-          checked={form.probe_follow_redirects}
-          onChange={(e) => setForm({ ...form, probe_follow_redirects: e.target.checked })}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("探测间隔")}</span>
-          <Input value={form.probe_interval} onChange={(e) => setForm({ ...form, probe_interval: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("探测范围")}</span>
-          <Input value={form.probe_scope} onChange={(e) => setForm({ ...form, probe_scope: e.target.value })} />
-        </div>
-      </section>
 
-      <section className="syscfg-section" style={{ marginBottom: 20 }}>
-        <h4>{t("判决与黑名单")}</h4>
-        <div className="field-group">
-          <span className="field-label">{t("启用判决")}</span>
-          <input
-          type="checkbox"
-          checked={form.verdict_enabled}
-          onChange={(e) => setForm({ ...form, verdict_enabled: e.target.checked })}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("连续失败拉黑阈值")}</span>
-          <Input
-          value={String(form.blacklist_threshold)}
-          onChange={(e) => setForm({ ...form, blacklist_threshold: num(e.target.value) })}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("黑名单复探间隔")}</span>
-          <Input value={form.rehab_interval} onChange={(e) => setForm({ ...form, rehab_interval: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("洗白所需连续通过")}</span>
-          <Input
-          value={String(form.rehab_success_threshold)}
-          onChange={(e) => setForm({ ...form, rehab_success_threshold: num(e.target.value) })}
-          />
-        </div>
-      </section>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "16px 24px",
+            marginTop: 16,
+          }}
+        >
+          <div>
+            <label>{t("应用探测")}</label>
+            <Switch
+              checked={form.probe_enabled}
+              onChange={(e) => setForm({ ...form, probe_enabled: e.target.checked })}
+            />
+            <p className="muted">{t("关闭时不产生任何探测样本")}</p>
+          </div>
 
-      <section className="syscfg-section" style={{ marginBottom: 20 }}>
-        <h4>{t("筛选增强")}</h4>
-        <div className="field-group">
-          <span className="field-label">{t("延迟 Top N（0=不限）")}</span>
-          <Input value={String(form.latency_top_n)} onChange={(e) => setForm({ ...form, latency_top_n: num(e.target.value) })} />
+          <div>
+            <label>{t("探测方法")}</label>
+            <Select
+              value={form.probe_method}
+              onChange={(e) => setForm({ ...form, probe_method: e.target.value })}
+            >
+              {["POST", "GET", "PUT", "PATCH", "DELETE", "HEAD"].map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </Select>
+            <p className="muted">{t("默认 POST")}</p>
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>{t("探测 URL")}</label>
+            <Input value={form.probe_url} onChange={(e) => setForm({ ...form, probe_url: e.target.value })} />
+            <p className="muted">{t("任意 URL，示例为 opencode 匿名请求地址")}</p>
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>{t("请求头")}</label>
+            <Textarea
+              rows={3}
+              value={form.probe_headers}
+              onChange={(e) => setForm({ ...form, probe_headers: e.target.value })}
+            />
+            <p className="muted">{t("每行一条：名称: 值")}</p>
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>{t("请求体")}</label>
+            <Textarea
+              rows={4}
+              value={form.probe_body}
+              onChange={(e) => setForm({ ...form, probe_body: e.target.value })}
+            />
+            <p className="muted">{t("请求体模板，可自由改写")}</p>
+          </div>
+
+          <div>
+            <label>{t("通过状态码")}</label>
+            <Input
+              value={form.probe_pass_status}
+              onChange={(e) => setForm({ ...form, probe_pass_status: e.target.value })}
+            />
+            <p className="muted">{t("逗号分隔，默认 200；其余一律计失败")}</p>
+          </div>
+
+          <div>
+            <label>{t("跟随重定向")}</label>
+            <Switch
+              checked={form.probe_follow_redirects}
+              onChange={(e) => setForm({ ...form, probe_follow_redirects: e.target.checked })}
+            />
+            <p className="muted">{t("默认开启")}</p>
+          </div>
+
+          <div>
+            <label>{t("探测间隔")}</label>
+            <Input value={form.probe_interval} onChange={(e) => setForm({ ...form, probe_interval: e.target.value })} />
+            <p className="muted">{t("默认 30m，勿过勤")}</p>
+          </div>
+
+          <div>
+            <label>{t("探测范围")}</label>
+            <Select value={form.probe_scope} onChange={(e) => setForm({ ...form, probe_scope: e.target.value })}>
+              <option value="untested,failed,blacklisted">{t("未探测 / 失败过 / 黑名单中")}</option>
+              <option value="untested">{t("仅未探测")}</option>
+              <option value="failed">{t("仅失败过")}</option>
+              <option value="blacklisted">{t("仅黑名单")}</option>
+            </Select>
+            <p className="muted">{t("绝不整池扫")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("延迟上限 ms（0=不限）")}</span>
-          <Input value={String(form.latency_max_ms)} onChange={(e) => setForm({ ...form, latency_max_ms: num(e.target.value) })} />
+      </Card>
+
+      <Card>
+        <div className="detail-header">
+          <div>
+            <h3>{t("判决与黑名单")}</h3>
+            <p>{t("连续失败即拉黑该出口 IP，并在本平台路由中剔除。")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("P95 上限 ms（0=不限）")}</span>
-          <Input value={String(form.latency_p95_max_ms)} onChange={(e) => setForm({ ...form, latency_p95_max_ms: num(e.target.value) })} />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "16px 24px",
+            marginTop: 16,
+          }}
+        >
+          <div>
+            <label>{t("应用判决")}</label>
+            <Switch
+              checked={form.verdict_enabled}
+              onChange={(e) => setForm({ ...form, verdict_enabled: e.target.checked })}
+            />
+            <p className="muted">{t("关闭时只记录台账，不剔除路由")}</p>
+          </div>
+
+          <div>
+            <label>{t("连续失败拉黑阈值")}</label>
+            <Input
+              type="number"
+              min={1}
+              value={String(form.blacklist_threshold)}
+              onChange={(e) => setForm({ ...form, blacklist_threshold: num(e.target.value) })}
+            />
+            <p className="muted">{t("默认 3 次")}</p>
+          </div>
+
+          <div>
+            <label>{t("黑名单复探间隔")}</label>
+            <Input value={form.rehab_interval} onChange={(e) => setForm({ ...form, rehab_interval: e.target.value })} />
+            <p className="muted">{t("默认 6h")}</p>
+          </div>
+
+          <div>
+            <label>{t("洗白所需连续通过")}</label>
+            <Input
+              type="number"
+              min={1}
+              value={String(form.rehab_success_threshold)}
+              onChange={(e) => setForm({ ...form, rehab_success_threshold: num(e.target.value) })}
+            />
+            <p className="muted">{t("默认 3 次，中间失败即重计")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("最小存活连击（0=不限）")}</span>
-          <Input value={String(form.min_alive_streak)} onChange={(e) => setForm({ ...form, min_alive_streak: num(e.target.value) })} />
+      </Card>
+
+      <Card>
+        <div className="detail-header">
+          <div>
+            <h3>{t("筛选增强")}</h3>
+            <p>{t("全部 AND 叠加；不填即不限制。")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("近 24 小时探测通过率（按小时桶滚动，无样本时不限制）")}</span>
-          <Input value={String(form.min_probe_success_rate)} onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("最近成功探测最大年龄")}</span>
-          <Input value={form.max_last_probe_age} onChange={(e) => setForm({ ...form, max_last_probe_age: e.target.value })} />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "16px 24px",
+            marginTop: 16,
+          }}
+        >
+          <div>
+            <label>{t("延迟 Top N")}</label>
+            <Input
+              type="number"
+              min={0}
+              value={String(form.latency_top_n)}
+              onChange={(e) => setForm({ ...form, latency_top_n: num(e.target.value) })}
+            />
+            <p className="muted">{t("0=不限")}</p>
+          </div>
+
+          <div>
+            <label>{t("延迟上限 ms")}</label>
+            <Input
+              type="number"
+              min={0}
+              value={String(form.latency_max_ms)}
+              onChange={(e) => setForm({ ...form, latency_max_ms: num(e.target.value) })}
+            />
+            <p className="muted">{t("0=不限")}</p>
+          </div>
+
+          <div>
+            <label>{t("P95 上限 ms")}</label>
+            <Input
+              type="number"
+              min={0}
+              value={String(form.latency_p95_max_ms)}
+              onChange={(e) => setForm({ ...form, latency_p95_max_ms: num(e.target.value) })}
+            />
+            <p className="muted">{t("0=不限；无样本时不生效")}</p>
+          </div>
+
+          <div>
+            <label>{t("最小存活连击")}</label>
+            <Input
+              type="number"
+              min={0}
+              value={String(form.min_alive_streak)}
+              onChange={(e) => setForm({ ...form, min_alive_streak: num(e.target.value) })}
+            />
+            <p className="muted">{t("0=不限；未探测节点不受限")}</p>
+          </div>
+
+          <div>
+            <label>{t("近 24 小时探测通过率")}</label>
+            <Input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={String(form.min_probe_success_rate)}
+              onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })}
+            />
+            <p className="muted">{t("按小时桶滚动，无样本时不限制；0=不限")}</p>
+          </div>
+
+          <div>
+            <label>{t("最近成功探测最大年龄")}</label>
+            <Input
+              value={form.max_last_probe_age}
+              onChange={(e) => setForm({ ...form, max_last_probe_age: e.target.value })}
+            />
+            <p className="muted">{t("如 2h；0s=不限")}</p>
+          </div>
+
+          <div>
+            <label>{t("最短入池时长")}</label>
+            <Input value={form.min_node_age} onChange={(e) => setForm({ ...form, min_node_age: e.target.value })} />
+            <p className="muted">{t("如 10m；0s=不限")}</p>
+          </div>
+
+          <div>
+            <label>{t("出口 IP 版本")}</label>
+            <Select
+              value={form.egress_ip_version}
+              onChange={(e) => setForm({ ...form, egress_ip_version: e.target.value })}
+            >
+              <option value="">{t("不限")}</option>
+              <option value="v4">IPv4</option>
+              <option value="v6">IPv6</option>
+            </Select>
+            <p className="muted">{t("按实测出口 IP 判定")}</p>
+          </div>
+
+          <div>
+            <label>{t("出口国家")}</label>
+            <Input
+              value={form.egress_country_filters}
+              onChange={(e) => setForm({ ...form, egress_country_filters: e.target.value })}
+            />
+            <p className="muted">{t("逗号分隔，如 jp,us；! 前缀排除")}</p>
+          </div>
+
+          <div>
+            <label>{t("ASN")}</label>
+            <Input value={form.asn_filters} onChange={(e) => setForm({ ...form, asn_filters: e.target.value })} />
+            <p className="muted">{t("如 as123,!as456；需 ASN 库")}</p>
+          </div>
+
+          <div>
+            <label>{t("IP 类型")}</label>
+            <Select
+              value={form.ip_type_filters}
+              onChange={(e) => setForm({ ...form, ip_type_filters: e.target.value })}
+            >
+              <option value="">{t("不限")}</option>
+              <option value="residential">{t("住宅")}</option>
+              <option value="hosting">{t("机房")}</option>
+              <option value="!hosting">{t("非机房")}</option>
+              <option value="!residential">{t("非住宅")}</option>
+            </Select>
+            <p className="muted">{t("按 ASN 组织名启发式判定")}</p>
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>{t("手动 IP 黑白")}</label>
+            <Input
+              value={form.egress_ip_filters}
+              onChange={(e) => setForm({ ...form, egress_ip_filters: e.target.value })}
+            />
+            <p className="muted">{t("IP 或 CIDR，逗号分隔；! 前缀排除")}</p>
+          </div>
         </div>
 
         {!form.probe_enabled &&
@@ -321,96 +511,114 @@ export function PlatformPolicyPanel({ platform }: Props) {
           (form.max_last_probe_age !== "" &&
             form.max_last_probe_age !== "0s" &&
             form.max_last_probe_age !== "0")) ? (
-          <p className="muted">{t("未开启探测，这些维度不会生效")}</p>
+          <p className="muted" style={{ marginTop: 12 }}>
+            {t("未开启探测，这些维度不会生效")}
+          </p>
         ) : null}
-        <div className="field-group">
-          <span className="field-label">{t("最短入池时长")}</span>
-          <Input value={form.min_node_age} onChange={(e) => setForm({ ...form, min_node_age: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("出口 IP 版本（v4/v6/空）")}</span>
-          <Input value={form.egress_ip_version} onChange={(e) => setForm({ ...form, egress_ip_version: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("出口国家（逗号分隔，! 排除）")}</span>
-          <Input value={form.egress_country_filters} onChange={(e) => setForm({ ...form, egress_country_filters: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("ASN（as123 / !as123）")}</span>
-          <Input value={form.asn_filters} onChange={(e) => setForm({ ...form, asn_filters: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("IP 类型（residential/hosting）")}</span>
-          <Input value={form.ip_type_filters} onChange={(e) => setForm({ ...form, ip_type_filters: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("手动 IP 黑白（IP/CIDR，! 排除）")}</span>
-          <Input value={form.egress_ip_filters} onChange={(e) => setForm({ ...form, egress_ip_filters: e.target.value })} />
-        </div>
-      </section>
+      </Card>
 
-      <section className="syscfg-section" style={{ marginBottom: 20 }}>
-        <h4>{t("换路设置")}</h4>
-        <div className="field-group">
-          <span className="field-label">{t("启用换路")}</span>
-          <input
-          type="checkbox"
-          checked={form.failover_enabled}
-          onChange={(e) => setForm({ ...form, failover_enabled: e.target.checked })}
-          />
+      <Card>
+        <div className="detail-header">
+          <div>
+            <h3>{t("换路设置")}</h3>
+            <p>{t("仅连接阶段失败时换节点；已建立的传输不重试。")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("最大换路次数")}</span>
-          <Input
-          value={String(form.failover_max_switches)}
-          onChange={(e) => setForm({ ...form, failover_max_switches: num(e.target.value) })}
-          />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("总截止时间")}</span>
-          <Input value={form.failover_deadline} onChange={(e) => setForm({ ...form, failover_deadline: e.target.value })} />
-        </div>
-        <div className="field-group">
-          <span className="field-label">{t("换路阶段（当前仅 connect）")}</span>
-          <Input value={form.failover_stage} onChange={(e) => setForm({ ...form, failover_stage: e.target.value })} />
-        </div>
-      </section>
 
-      <section className="syscfg-section" style={{ marginBottom: 20 }}>
-        <h4>{t("出口 IP 台账")}</h4>
-        <div className="policy-toolbar">
-        <div className="field-group">
-          <span className="field-label">{t("状态")}</span>
-          <select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
-          <option value="all">{t("全部")}</option>
-          <option value="unknown">unknown</option>
-          <option value="normal">normal</option>
-          <option value="blacklisted">blacklisted</option>
-          </select>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "16px 24px",
+            marginTop: 16,
+          }}
+        >
+          <div>
+            <label>{t("应用换路")}</label>
+            <Switch
+              checked={form.failover_enabled}
+              onChange={(e) => setForm({ ...form, failover_enabled: e.target.checked })}
+            />
+            <p className="muted">{t("关闭时拨号失败直接返回错误")}</p>
+          </div>
+
+          <div>
+            <label>{t("最大换路次数")}</label>
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={String(form.failover_max_switches)}
+              onChange={(e) => setForm({ ...form, failover_max_switches: num(e.target.value) })}
+            />
+            <p className="muted">{t("默认 3，范围 1–10")}</p>
+          </div>
+
+          <div>
+            <label>{t("总截止时间")}</label>
+            <Input
+              value={form.failover_deadline}
+              onChange={(e) => setForm({ ...form, failover_deadline: e.target.value })}
+            />
+            <p className="muted">{t("默认 15s，范围 1s–1m")}</p>
+          </div>
+
+          <div>
+            <label>{t("换路阶段")}</label>
+            <Select
+              value={form.failover_stage}
+              onChange={(e) => setForm({ ...form, failover_stage: e.target.value })}
+            >
+              <option value="connect">{t("连接阶段")}</option>
+              <option value="first_byte" disabled>{t("首字节（未实现）")}</option>
+              <option value="any" disabled>{t("任意阶段（未实现）")}</option>
+            </Select>
+            <p className="muted">{t("当前仅实现 connect")}</p>
+          </div>
         </div>
-        <div className="field-group">
-          <span className="field-label">{t("排序")}</span>
-          <select value={egressSort} onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}>
-          <option value="failure_desc">{t("连续失败 ↓")}</option>
-          <option value="failure_asc">{t("连续失败 ↑")}</option>
-          <option value="probe_desc">{t("最近探测时间 ↓")}</option>
-          <option value="probe_asc">{t("最近探测时间 ↑")}</option>
-          <option value="ip_asc">{t("IP 字典序")}</option>
-          </select>
+      </Card>
+
+      <Card>
+        <div className="detail-header">
+          <div>
+            <h3>{t("出口 IP 台账")}</h3>
+            <p>{t("每个出口 IP 的状态、失败计数与洗白进度。")}</p>
+          </div>
         </div>
-          <span className="muted">
-            {visibleEgressRows.length} / {allEgressRows.length}
-          </span>
+
+        <div className="policy-toolbar" style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>
+          <div>
+            <label>{t("状态")}</label>
+            <Select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
+              <option value="all">{t("全部")}</option>
+              <option value="unknown">unknown</option>
+              <option value="normal">normal</option>
+              <option value="blacklisted">blacklisted</option>
+            </Select>
+          </div>
+          <div>
+            <label>{t("排序")}</label>
+            <Select value={egressSort} onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}>
+              <option value="failure_desc">{t("连续失败 ↓")}</option>
+              <option value="failure_asc">{t("连续失败 ↑")}</option>
+              <option value="probe_desc">{t("最近探测时间 ↓")}</option>
+              <option value="probe_asc">{t("最近探测时间 ↑")}</option>
+              <option value="ip_asc">{t("IP 字典序")}</option>
+            </Select>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => void egressQuery.refetch()} disabled={egressQuery.isFetching}>
+            {t("刷新")}
+          </Button>
+          <span className="muted">{visibleEgressRows.length} / {allEgressRows.length}</span>
         </div>
+
         {egressQuery.isLoading ? <p className="muted">{t("加载中...")}</p> : null}
-        {egressQuery.isError ? (
-          <p className="muted">{formatApiErrorMessage(egressQuery.error, t)}</p>
-        ) : null}
-        {!egressQuery.isLoading && !egressQuery.isError && !(egressQuery.data?.items ?? []).length ? (
+        {egressQuery.isError ? <p className="muted">{formatApiErrorMessage(egressQuery.error, t)}</p> : null}
+        {!egressQuery.isLoading && !egressQuery.isError && !allEgressRows.length ? (
           <p className="muted">{t("暂无台账数据")}</p>
         ) : null}
         {visibleEgressRows.length ? (
-          <div className="table-wrap">
+          <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -441,7 +649,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
             </table>
           </div>
         ) : null}
-      </section>
-    </Card>
+      </Card>
+    </div>
   );
 }
