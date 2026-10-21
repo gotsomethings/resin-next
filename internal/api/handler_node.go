@@ -42,6 +42,8 @@ func compareNodeSummaries(sortBy string, a, b service.NodeSummary) int {
 		order = cmp.Compare(a.FailureCount, b.FailureCount)
 	case "region":
 		order = strings.Compare(a.Region, b.Region)
+	case "asn":
+		order = cmp.Compare(a.ASNNumber, b.ASNNumber)
 	default:
 		order = strings.Compare(nodeTagSortKey(a), nodeTagSortKey(b))
 	}
@@ -118,6 +120,9 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 		if v := strings.TrimSpace(q.Get("tag_keyword")); v != "" {
 			filters.TagKeyword = &v
 		}
+		if v := strings.TrimSpace(q.Get("asn")); v != "" {
+			filters.ASN = &v
+		}
 
 		circuitOpen, ok := parseBoolQueryOrWriteInvalid(w, r, "circuit_open")
 		if !ok {
@@ -137,6 +142,12 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 		}
 		filters.Enabled = enabled
 
+		pendingTest, ok := parseBoolQueryOrWriteInvalid(w, r, "pending_test")
+		if !ok {
+			return
+		}
+		filters.PendingTest = pendingTest
+
 		if v := q.Get("probed_since"); v != "" {
 			t, err := time.Parse(time.RFC3339Nano, v)
 			if err != nil {
@@ -152,7 +163,7 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 			return
 		}
 
-		sorting, ok := parseSortingOrWriteInvalid(w, r, []string{"tag", "created_at", "failure_count", "region"}, "tag", "asc")
+		sorting, ok := parseSortingOrWriteInvalid(w, r, []string{"tag", "created_at", "failure_count", "region", "asn"}, "tag", "asc")
 		if !ok {
 			return
 		}

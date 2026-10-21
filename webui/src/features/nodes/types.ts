@@ -20,6 +20,11 @@ export type NodeSummary = {
   last_latency_probe_attempt?: string;
   last_authority_latency_probe_attempt?: string;
   last_egress_update_attempt?: string;
+  /** 0 when no ASN database is available or the IP is not in it. */
+  asn_number: number;
+  asn_org?: string;
+  /** True while the node has never been probed (no egress IP or no attempt). */
+  pending_test: boolean;
   tags: NodeTag[];
 };
 
@@ -32,7 +37,7 @@ export type PageResponse<T> = {
   unique_healthy_egress_ips: number;
 };
 
-export type NodeSortBy = "tag" | "created_at" | "failure_count" | "region";
+export type NodeSortBy = "tag" | "created_at" | "failure_count" | "region" | "asn";
 export type SortOrder = "asc" | "desc";
 
 export type NodeListFilters = {
@@ -45,6 +50,8 @@ export type NodeListFilters = {
   enabled?: boolean;
   circuit_open?: boolean;
   has_outbound?: boolean;
+  asn?: string;
+  pending_test?: boolean;
 };
 
 export type NodeListQuery = NodeListFilters & {

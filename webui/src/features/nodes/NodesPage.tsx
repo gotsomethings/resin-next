@@ -23,7 +23,7 @@ import type { NodeSummary } from "./types";
 import { getAllRegions, getRegionName } from "./regions";
 import type { NodeListFilters, NodeSortBy, SortOrder } from "./types";
 
-type NodeStatusFilter = "all" | "healthy" | "circuit_open" | "error" | "disabled";
+type NodeStatusFilter = "all" | "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
 type NodeDisplayStatus = "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
 type ProbeAction = "egress" | "latency";
 
@@ -33,6 +33,7 @@ type NodeFilterDraft = {
   tag_keyword: string;
   region: string;
   egress_ip: string;
+  asn: string;
   status: NodeStatusFilter;
 };
 
@@ -42,6 +43,7 @@ const defaultFilterDraft: NodeFilterDraft = {
   tag_keyword: "",
   region: "",
   egress_ip: "",
+  asn: "",
   status: "all",
 };
 
@@ -84,7 +86,7 @@ function parseStatusParam(value: string | null): NodeStatusFilter | undefined {
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "all" || normalized === "healthy" || normalized === "circuit_open" || normalized === "error" || normalized === "disabled") {
+  if (normalized === "all" || normalized === "healthy" || normalized === "circuit_open" || normalized === "pending_test" || normalized === "error" || normalized === "disabled") {
     return normalized;
   }
 
@@ -100,6 +102,10 @@ function statusFromQuery(params: URLSearchParams): NodeStatusFilter {
   const hasOutbound = parseBoolParam(params.get("has_outbound"));
   const circuitOpen = parseBoolParam(params.get("circuit_open"));
   const enabled = parseBoolParam(params.get("enabled"));
+
+  if (parseBoolParam(params.get("pending_test")) === true) {
+    return "pending_test";
+  }
 
   if (enabled === false) {
     return "disabled";
@@ -132,6 +138,7 @@ function draftFromQuery(search: string): NodeFilterDraft {
     tag_keyword: tagKeyword,
     region: trimQueryValue(params, "region").toUpperCase(),
     egress_ip: trimQueryValue(params, "egress_ip"),
+    asn: trimQueryValue(params, "asn"),
     status: statusFromQuery(params),
   };
 }
@@ -142,6 +149,7 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
   let circuit_open: boolean | undefined = undefined;
   let has_outbound: boolean | undefined = undefined;
   let enabled: boolean | undefined = undefined;
+  let pending_test: boolean | undefined = undefined;
 
   switch (draft.status) {
     case "healthy":
@@ -153,6 +161,9 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
       enabled = true;
       has_outbound = true;
       circuit_open = true;
+      break;
+    case "pending_test":
+      pending_test = true;
       break;
     case "error":
       enabled = true;
@@ -172,9 +183,11 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
     tag_keyword: draft.tag_keyword,
     region: draft.region,
     egress_ip: draft.egress_ip,
+    asn: draft.asn,
     enabled,
     circuit_open,
     has_outbound,
+    pending_test,
   };
 }
 
@@ -193,7 +206,8 @@ function hasReferenceLatency(node: NodeSummary): node is NodeSummary & { referen
 }
 
 function isPendingTestNode(node: NodeSummary): boolean {
-  return Boolean(node.circuit_open_since) && node.failure_count === 0;
+  // Backend-derived: never probed (no egress IP yet, or no probe attempt).
+  return node.pending_test;
 }
 
 function getNodeDisplayStatus(node: NodeSummary): NodeDisplayStatus {
@@ -563,6 +577,26 @@ export function NodesPage() {
         );
       },
     }),
+    col.accessor("asn_number", {
+      header: () => (
+        <button type="button" className="table-sort-btn" onClick={() => changeSort("asn")}>
+          {t("ASN")}
+          <span>{sortIndicator(sortBy === "asn", sortOrder)}</span>
+        </button>
+      ),
+      cell: (info) => {
+        const node = info.row.original;
+        if (!node.asn_number) {
+          return "-";
+        }
+        const label = `ASN${node.asn_number}${node.asn_org ? ` ${node.asn_org}` : ""}`;
+        return (
+          <div style={{ maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={label}>
+            {label}
+          </div>
+        );
+      },
+    }),
     col.display({
       id: "reference_latency_ms",
       header: t("参考延迟"),
@@ -772,6 +806,19 @@ export function NodesPage() {
             </div>
 
             <div style={NODE_FILTER_ITEM_STYLE}>
+              <label htmlFor="node-asn" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                ASN
+              </label>
+              <Input
+                id="node-asn"
+                value={draftFilters.asn}
+                onChange={(event) => handleFilterChange("asn", event.target.value)}
+                placeholder={t("如 13335 或 Cloudflare")}
+                style={NODE_FILTER_CONTROL_STYLE}
+              />
+            </div>
+
+            <div style={NODE_FILTER_ITEM_STYLE}>
               <label htmlFor="node-status" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
                 {t("状态")}
               </label>
@@ -783,7 +830,8 @@ export function NodesPage() {
               >
                 <option value="all">{t("全部")}</option>
                 <option value="healthy">{t("健康")}</option>
-                <option value="circuit_open">{t("熔断 / 待测")}</option>
+                <option value="circuit_open">{t("熔断")}</option>
+                <option value="pending_test">{t("待测")}</option>
                 <option value="error">{t("错误")}</option>
                 <option value="disabled">{t("禁用")}</option>
               </Select>

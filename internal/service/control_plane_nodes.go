@@ -1,8 +1,11 @@
 package service
 
 import (
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Resinat/Resin/internal/geoip"
 
 	"github.com/Resinat/Resin/internal/node"
 	"github.com/Resinat/Resin/internal/probe"
@@ -24,6 +27,12 @@ type NodeFilters struct {
 	EgressIP       *string
 	ProbedSince    *time.Time
 	TagKeyword     *string
+	// ASN matches asn_number (substring of its decimal form) or asn_org
+	// (case-insensitive substring). Empty/nil means "no filter".
+	ASN *string
+	// PendingTest keeps only nodes that have never been probed:
+	// no egress IP yet, or no probe attempt recorded.
+	PendingTest *bool
 }
 
 // ListNodes returns nodes from the pool with optional filters.
@@ -202,7 +211,50 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 			return false
 		}
 	}
+	// Pending-test filter: never probed (no egress IP, or no probe attempt).
+	if filters.PendingTest != nil {
+		pending := !entry.GetEgressIP().IsValid() || entry.LastProbeAttempt.Load() == 0
+		if pending != *filters.PendingTest {
+			return false
+		}
+	}
+	// ASN filter.
+	if filters.ASN != nil {
+		if !s.nodeMatchesASN(entry, *filters.ASN) {
+			return false
+		}
+	}
 	return true
+}
+
+// nodeASN resolves the ASN record for a node's egress IP. The second return
+// value is false when no ASN database is attached or the IP is not in it.
+func (s *ControlPlaneService) nodeASN(entry *node.NodeEntry) (geoip.ASNInfo, bool) {
+	if s == nil || s.ASN == nil || entry == nil {
+		return geoip.ASNInfo{}, false
+	}
+	egressIP := entry.GetEgressIP()
+	if !egressIP.IsValid() {
+		return geoip.ASNInfo{}, false
+	}
+	return s.ASN.Lookup(egressIP)
+}
+
+// nodeMatchesASN reports whether a node's ASN number or organization matches
+// the keyword. A node without ASN data never matches a non-empty keyword.
+func (s *ControlPlaneService) nodeMatchesASN(entry *node.NodeEntry, keyword string) bool {
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	if keyword == "" {
+		return true
+	}
+	info, ok := s.nodeASN(entry)
+	if !ok {
+		return false
+	}
+	if strings.Contains(strconv.FormatUint(uint64(info.Number), 10), keyword) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(info.Org), keyword)
 }
 
 // GetNode returns a single node by hash.

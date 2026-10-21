@@ -4,6 +4,7 @@ export const APP_TITLE_ZH = "Resin · 高性能粘性代理池";
 const APP_TITLE_EN = "Resin · Sticky Proxy Pool";
 
 const EXACT_ZH_TO_EN: Record<string, string> = {
+  "如 13335 或 Cloudflare": "e.g. 13335 or Cloudflare",
   "ASN 库状态": "ASN database status",
   "ASN 数据库加载时间与下次计划更新": "ASN database load time and next scheduled update",
   "ASN 数据库更新时间": "ASN database updated",

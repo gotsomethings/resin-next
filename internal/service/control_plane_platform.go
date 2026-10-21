@@ -808,7 +808,12 @@ type NodeSummary struct {
 	LastAuthorityLatencyProbeAttempt string    `json:"last_authority_latency_probe_attempt,omitempty"`
 	ReferenceLatencyMs               *float64  `json:"reference_latency_ms,omitempty"`
 	LastEgressUpdateAttempt          string    `json:"last_egress_update_attempt,omitempty"`
-	Tags                             []NodeTag `json:"tags"`
+	ASNNumber                        uint32    `json:"asn_number"`
+	ASNOrg                           string    `json:"asn_org,omitempty"`
+	// PendingTest is true while the node has never been probed: no egress IP
+	// yet, or no probe attempt recorded.
+	PendingTest bool      `json:"pending_test"`
+	Tags        []NodeTag `json:"tags"`
 }
 
 // IsHealthyAndEnabled follows the node-summary health rule used by API/UI
@@ -852,6 +857,12 @@ func (s *ControlPlaneService) nodeEntryToSummary(h node.Hash, entry *node.NodeEn
 			ns.Region = entry.GetRegion(s.GeoIP.Lookup)
 		}
 	}
+	// ASN columns: zero/empty when no database is attached or the IP is absent.
+	if info, ok := s.nodeASN(entry); ok {
+		ns.ASNNumber = info.Number
+		ns.ASNOrg = info.Org
+	}
+	ns.PendingTest = !egressIP.IsValid() || entry.LastProbeAttempt.Load() == 0
 
 	if leu := entry.LastEgressUpdate.Load(); leu > 0 {
 		ns.LastEgressUpdate = time.Unix(0, leu).UTC().Format(time.RFC3339Nano)

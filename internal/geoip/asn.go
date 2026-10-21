@@ -78,6 +78,12 @@ func NewASNService(path string) *ASNService {
 	return &ASNService{path: path}
 }
 
+// NewASNServiceWithReader returns an already-loaded service backed by reader.
+// Used by tests and by callers that opened the database themselves.
+func NewASNServiceWithReader(reader ASNReader) *ASNService {
+	return &ASNService{reader: reader}
+}
+
 // openASNFile opens the database; swappable in tests.
 var openASNFile = OpenASN
 
