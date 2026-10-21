@@ -124,11 +124,24 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 			filters.ASN = &v
 		}
 
+		// Legacy deep links used a single status field; map them onto the two
+		// independent switches instead of rejecting them.
+		switch strings.TrimSpace(q.Get("status")) {
+		case "circuit_open":
+			v := true
+			filters.CircuitOpen = &v
+		case "pending_test":
+			v := true
+			filters.PendingTest = &v
+		}
+
 		circuitOpen, ok := parseBoolQueryOrWriteInvalid(w, r, "circuit_open")
 		if !ok {
 			return
 		}
-		filters.CircuitOpen = circuitOpen
+		if circuitOpen != nil {
+			filters.CircuitOpen = circuitOpen
+		}
 
 		hasOutbound, ok := parseBoolQueryOrWriteInvalid(w, r, "has_outbound")
 		if !ok {
@@ -146,7 +159,9 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		filters.PendingTest = pendingTest
+		if pendingTest != nil {
+			filters.PendingTest = pendingTest
+		}
 
 		if v := q.Get("probed_since"); v != "" {
 			t, err := time.Parse(time.RFC3339Nano, v)

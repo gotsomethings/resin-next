@@ -185,9 +185,20 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 			return false
 		}
 	}
-	// Circuit open filter.
-	if filters.CircuitOpen != nil {
-		if entry.IsCircuitOpen() != *filters.CircuitOpen {
+	// Circuit-open and pending-test are independent switches. Each one alone
+	// filters by its own field; asking for both means "either" (union), because
+	// they are two different symptoms an operator wants to see side by side.
+	wantCircuit := filters.CircuitOpen != nil && *filters.CircuitOpen
+	wantPending := filters.PendingTest != nil && *filters.PendingTest
+	if wantCircuit && wantPending {
+		if !entry.IsCircuitOpen() && !nodeIsPendingTest(entry) {
+			return false
+		}
+	} else {
+		if filters.CircuitOpen != nil && entry.IsCircuitOpen() != *filters.CircuitOpen {
+			return false
+		}
+		if filters.PendingTest != nil && nodeIsPendingTest(entry) != *filters.PendingTest {
 			return false
 		}
 	}
@@ -211,13 +222,6 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 			return false
 		}
 	}
-	// Pending-test filter: never probed (no egress IP, or no probe attempt).
-	if filters.PendingTest != nil {
-		pending := !entry.GetEgressIP().IsValid() || entry.LastProbeAttempt.Load() == 0
-		if pending != *filters.PendingTest {
-			return false
-		}
-	}
 	// ASN filter.
 	if filters.ASN != nil {
 		if !s.nodeMatchesASN(entry, *filters.ASN) {
@@ -225,6 +229,15 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 		}
 	}
 	return true
+}
+
+// nodeIsPendingTest reports whether a node has never been probed: no egress
+// IP yet, or no probe attempt recorded.
+func nodeIsPendingTest(entry *node.NodeEntry) bool {
+	if entry == nil {
+		return true
+	}
+	return !entry.GetEgressIP().IsValid() || entry.LastProbeAttempt.Load() == 0
 }
 
 // nodeASN resolves the ASN record for a node's egress IP. The second return

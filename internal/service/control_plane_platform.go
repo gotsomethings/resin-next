@@ -862,7 +862,7 @@ func (s *ControlPlaneService) nodeEntryToSummary(h node.Hash, entry *node.NodeEn
 		ns.ASNNumber = info.Number
 		ns.ASNOrg = info.Org
 	}
-	ns.PendingTest = !egressIP.IsValid() || entry.LastProbeAttempt.Load() == 0
+	ns.PendingTest = nodeIsPendingTest(entry)
 
 	if leu := entry.LastEgressUpdate.Load(); leu > 0 {
 		ns.LastEgressUpdate = time.Unix(0, leu).UTC().Format(time.RFC3339Nano)

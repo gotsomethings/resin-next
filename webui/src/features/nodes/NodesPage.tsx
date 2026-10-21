@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/Button";
 import { DataTable } from "../../components/ui/DataTable";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { Switch } from "../../components/ui/Switch";
 import { OffsetPagination } from "../../components/ui/OffsetPagination";
 import { Select } from "../../components/ui/Select";
 import { ToastContainer } from "../../components/ui/Toast";
@@ -23,7 +24,7 @@ import type { NodeSummary } from "./types";
 import { getAllRegions, getRegionName } from "./regions";
 import type { NodeListFilters, NodeSortBy, SortOrder } from "./types";
 
-type NodeStatusFilter = "all" | "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
+type NodeStatusFilter = "all" | "healthy" | "error" | "disabled";
 type NodeDisplayStatus = "healthy" | "circuit_open" | "pending_test" | "error" | "disabled";
 type ProbeAction = "egress" | "latency";
 
@@ -34,6 +35,9 @@ type NodeFilterDraft = {
   region: string;
   egress_ip: string;
   asn: string;
+  /** Independent switches; both on means union (OR), not intersection. */
+  circuit_open: boolean;
+  pending_test: boolean;
   status: NodeStatusFilter;
 };
 
@@ -44,6 +48,8 @@ const defaultFilterDraft: NodeFilterDraft = {
   region: "",
   egress_ip: "",
   asn: "",
+  circuit_open: false,
+  pending_test: false,
   status: "all",
 };
 
@@ -86,7 +92,7 @@ function parseStatusParam(value: string | null): NodeStatusFilter | undefined {
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "all" || normalized === "healthy" || normalized === "circuit_open" || normalized === "pending_test" || normalized === "error" || normalized === "disabled") {
+  if (normalized === "all" || normalized === "healthy" || normalized === "error" || normalized === "disabled") {
     return normalized;
   }
 
@@ -100,24 +106,15 @@ function statusFromQuery(params: URLSearchParams): NodeStatusFilter {
   }
 
   const hasOutbound = parseBoolParam(params.get("has_outbound"));
-  const circuitOpen = parseBoolParam(params.get("circuit_open"));
   const enabled = parseBoolParam(params.get("enabled"));
-
-  if (parseBoolParam(params.get("pending_test")) === true) {
-    return "pending_test";
-  }
 
   if (enabled === false) {
     return "disabled";
   }
-
   if (hasOutbound === false) {
     return "error";
   }
-  if (hasOutbound === true && circuitOpen === true) {
-    return "circuit_open";
-  }
-  if (hasOutbound === true && circuitOpen === false) {
+  if (hasOutbound === true) {
     return "healthy";
   }
 
@@ -131,6 +128,7 @@ function trimQueryValue(params: URLSearchParams, key: string): string {
 function draftFromQuery(search: string): NodeFilterDraft {
   const params = new URLSearchParams(search);
   const tagKeyword = trimQueryValue(params, "tag_keyword") || trimQueryValue(params, "tag");
+  const legacyStatus = params.get("status")?.trim().toLowerCase() ?? "";
 
   return {
     platform_id: trimQueryValue(params, "platform_id"),
@@ -139,6 +137,8 @@ function draftFromQuery(search: string): NodeFilterDraft {
     region: trimQueryValue(params, "region").toUpperCase(),
     egress_ip: trimQueryValue(params, "egress_ip"),
     asn: trimQueryValue(params, "asn"),
+    circuit_open: parseBoolParam(params.get("circuit_open")) === true || legacyStatus === "circuit_open",
+    pending_test: parseBoolParam(params.get("pending_test")) === true || legacyStatus === "pending_test",
     status: statusFromQuery(params),
   };
 }
@@ -146,24 +146,13 @@ function draftFromQuery(search: string): NodeFilterDraft {
 
 
 function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
-  let circuit_open: boolean | undefined = undefined;
   let has_outbound: boolean | undefined = undefined;
   let enabled: boolean | undefined = undefined;
-  let pending_test: boolean | undefined = undefined;
 
   switch (draft.status) {
     case "healthy":
       enabled = true;
       has_outbound = true;
-      circuit_open = false;
-      break;
-    case "circuit_open":
-      enabled = true;
-      has_outbound = true;
-      circuit_open = true;
-      break;
-    case "pending_test":
-      pending_test = true;
       break;
     case "error":
       enabled = true;
@@ -177,6 +166,8 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
       break;
   }
 
+  // The two switches are independent: only set them when on, so an off switch
+  // means "no filter" rather than "must not be circuit-open / pending".
   return {
     platform_id: draft.platform_id,
     subscription_id: draft.subscription_id,
@@ -185,9 +176,9 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
     egress_ip: draft.egress_ip,
     asn: draft.asn,
     enabled,
-    circuit_open,
     has_outbound,
-    pending_test,
+    circuit_open: draft.circuit_open ? true : undefined,
+    pending_test: draft.pending_test ? true : undefined,
   };
 }
 
@@ -501,9 +492,9 @@ export function NodesPage() {
     }
   };
 
-  const handleFilterChange = (key: keyof NodeFilterDraft, value: string) => {
+  const handleFilterChange = (key: keyof NodeFilterDraft, value: string | boolean) => {
     setDraftFilters((prev) => {
-      const next = { ...prev, [key]: value };
+      const next = { ...prev, [key]: value } as NodeFilterDraft;
       setActiveFilters(draftToActiveFilters(next));
       setSelectedNodeHash("");
       setDrawerOpen(false);
@@ -832,11 +823,35 @@ export function NodesPage() {
               >
                 <option value="all">{t("全部")}</option>
                 <option value="healthy">{t("健康")}</option>
-                <option value="circuit_open">{t("熔断")}</option>
-                <option value="pending_test">{t("待测")}</option>
                 <option value="error">{t("错误")}</option>
                 <option value="disabled">{t("禁用")}</option>
               </Select>
+            </div>
+
+            <div style={{ ...NODE_FILTER_ITEM_STYLE, flex: "0 0 auto", minWidth: "72px" }}>
+              <label htmlFor="node-circuit-open" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                {t("熔断")}
+              </label>
+              <div style={{ display: "flex", alignItems: "center", height: "32px" }}>
+                <Switch
+                  id="node-circuit-open"
+                  checked={draftFilters.circuit_open}
+                  onChange={(event) => handleFilterChange("circuit_open", event.target.checked)}
+                />
+              </div>
+            </div>
+
+            <div style={{ ...NODE_FILTER_ITEM_STYLE, flex: "0 0 auto", minWidth: "72px" }}>
+              <label htmlFor="node-pending-test" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                {t("待测")}
+              </label>
+              <div style={{ display: "flex", alignItems: "center", height: "32px" }}>
+                <Switch
+                  id="node-pending-test"
+                  checked={draftFilters.pending_test}
+                  onChange={(event) => handleFilterChange("pending_test", event.target.checked)}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.125rem", marginLeft: "auto" }}>
