@@ -49,7 +49,7 @@ import { PlatformAccessPanel } from "./PlatformAccessPanel";
 import { PlatformMonitorPanel } from "./PlatformMonitorPanel";
 import type { PlatformLease } from "./types";
 
-type PlatformDetailTab = "monitor" | "access" | "config" | "ops";
+type PlatformDetailTab = "monitor" | "access" | "config" | "ops" | "advanced";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const LEASE_MANAGEMENT_ANCHOR = "platform-lease-management";
@@ -60,6 +60,7 @@ const DETAIL_TABS: Array<{ key: PlatformDetailTab; label: string; hint: string }
   { key: "access", label: "接入", hint: "复制正向/反向代理地址" },
   { key: "config", label: "配置", hint: "过滤规则与分配策略" },
   { key: "ops", label: "运维", hint: "重置、清租约、删除操作" },
+  { key: "advanced", label: "高级", hint: "探测、判决、筛选增强与换路" },
 ];
 
 export function PlatformDetailPage() {
@@ -159,7 +160,11 @@ export function PlatformDetailPage() {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get("tab");
-    if (tab === "ops" || location.hash === `#${LEASE_MANAGEMENT_ANCHOR}`) {
+    if (tab && DETAIL_TABS.some((item) => item.key === tab)) {
+      setActiveTab(tab as PlatformDetailTab);
+      return;
+    }
+    if (location.hash === `#${LEASE_MANAGEMENT_ANCHOR}`) {
       setActiveTab("ops");
     }
   }, [location.hash, location.search]);
@@ -407,8 +412,6 @@ export function PlatformDetailPage() {
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {platform ? <PlatformPolicyPanel platform={platform} /> : null}
-
       {!platformId ? (
         <div className="callout callout-error">
           <AlertTriangle size={14} />
@@ -492,7 +495,12 @@ export function PlatformDetailPage() {
                     aria-controls={`platform-tabpanel-${tab.key}`}
                     className={`platform-detail-tab ${selected ? "platform-detail-tab-active" : ""}`}
                     title={t(tab.hint)}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      const params = new URLSearchParams(location.search);
+                      params.set("tab", tab.key);
+                      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+                    }}
                   >
                     <span>{t(tab.label)}</span>
                   </button>
@@ -677,6 +685,17 @@ export function PlatformDetailPage() {
                   </div>
                 </form>
               </section>
+            ) : null}
+
+            {activeTab === "advanced" ? (
+              <div
+                id="platform-tabpanel-advanced"
+                role="tabpanel"
+                aria-labelledby="platform-tab-advanced"
+                className="platform-detail-tabpanel"
+              >
+                {platform ? <PlatformPolicyPanel platform={platform} /> : null}
+              </div>
             ) : null}
 
             {activeTab === "ops" ? (
