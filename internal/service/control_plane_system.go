@@ -237,18 +237,19 @@ func (s *ControlPlaneService) PatchRuntimeConfig(patchJSON json.RawMessage) (*co
 		return nil, internal("persist config", err)
 	}
 
-	// 6. Atomic swap.
-	s.RuntimeCfg.Store(newCfg)
-	s.configVersion = newVersion
-
-	// 7. Hot-apply concurrency settings (fixed mode takes effect immediately;
-	//    auto mode lets the governor converge from the new ceiling).
+	// 6. Hot-apply concurrency settings BEFORE the swap, so the value readers
+	//    will observe is the real one rather than a stale echo.
 	if s.ProbeMgr != nil {
 		s.ProbeMgr.SetSettingsConcurrency(newCfg.ProbeConcurrencySettings)
 		if newCfg.ProbeConcurrencyMode == "fixed" {
 			s.ProbeMgr.SetEffectiveConcurrency(newCfg.ProbeConcurrencySettings)
 		}
+		newCfg.ProbeConcurrencyEffective = s.ProbeMgr.EffectiveConcurrency()
 	}
+
+	// 7. Atomic swap.
+	s.RuntimeCfg.Store(newCfg)
+	s.configVersion = newVersion
 
 	return newCfg, nil
 }

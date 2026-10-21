@@ -203,10 +203,12 @@ function parseForm(form: RuntimeConfigForm): RuntimeConfig {
     cache_flush_interval: parseDurationField("缓存异步刷盘间隔", form.cache_flush_interval),
     probe_concurrency: parseNonNegativeInt("探测并发设定值", form.probe_concurrency),
     probe_concurrency_mode: form.probe_concurrency_mode === "auto" ? "auto" : "fixed",
-    probe_concurrency_effective: parseNonNegativeInt("当前生效并发", form.probe_concurrency_effective),
+    verdict_gc_retention: form.verdict_gc_retention,
+    probe_concurrency_effective: form.probe_concurrency_effective
+      ? parseNonNegativeInt("当前生效并发", form.probe_concurrency_effective)
+      : 0,
     probe_concurrency_reason: form.probe_concurrency_reason,
     probe_concurrency_adjusted_at: form.probe_concurrency_adjusted_at,
-    verdict_gc_retention: form.verdict_gc_retention,
     cache_flush_dirty_threshold: parseNonNegativeInt("缓存刷盘脏阈值", form.cache_flush_dirty_threshold),
   };
 }
@@ -452,7 +454,8 @@ export function SystemConfigPage() {
         </div>
       </header>
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
 
       {!form ? (
         <Card className="syscfg-form-card platform-directory-card">
