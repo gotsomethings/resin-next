@@ -23,6 +23,8 @@ export type NodeSummary = {
   /** 0 when no ASN database is available or the IP is not in it. */
   asn_number: number;
   asn_org?: string;
+  /** Coarse class from the ASN org: residential | hosting | mobile. */
+  ip_type?: string;
   /** True while the node has never been probed (no egress IP or no attempt). */
   pending_test: boolean;
   tags: NodeTag[];
@@ -51,6 +53,7 @@ export type NodeListFilters = {
   circuit_open?: boolean;
   has_outbound?: boolean;
   asn?: string;
+  ip_type?: string;
   pending_test?: boolean;
 };
 

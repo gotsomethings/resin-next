@@ -146,3 +146,89 @@ func TestListNodes_CircuitOpenPendingTestAreExclusive(t *testing.T) {
 		t.Fatalf("pending_test=true missing expected nodes: %v", pendingSet)
 	}
 }
+
+// The status dropdown must return exactly the nodes whose badge shows that
+// status: 健康 excludes never-probed nodes, 待测 excludes tripped breakers.
+func TestListNodes_StatusBucketsMatchBadge(t *testing.T) {
+	cp, pool, sub := newASNTestService(t)
+
+	healthy := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.1","port":443}`), "203.0.113.10")
+	pending := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.2","port":443}`), "203.0.113.11")
+	tripped := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.3","port":443}`), "203.0.113.12")
+
+	e, _ := pool.GetEntry(healthy)
+	e.LastProbeAttempt.Store(time.Now().UnixNano())
+
+	e, _ = pool.GetEntry(pending)
+	e.LastProbeAttempt.Store(0)
+
+	e, _ = pool.GetEntry(tripped)
+	e.LastProbeAttempt.Store(0)
+	e.CircuitOpenSince.Store(time.Now().UnixNano())
+
+	yes, no := true, false
+
+	// 健康: enabled && has outbound && !circuit_open && !pending_test
+	hits, err := cp.ListNodes(NodeFilters{CircuitOpen: &no, PendingTest: &no})
+	if err != nil {
+		t.Fatalf("健康: %v", err)
+	}
+	if got := hashSet(hits); len(got) != 1 || !got[healthy.Hex()] {
+		t.Fatalf("健康 returned %v, want only the healthy node", got)
+	}
+
+	// 待测: pending_test && !circuit_open
+	hits, err = cp.ListNodes(NodeFilters{CircuitOpen: &no, PendingTest: &yes})
+	if err != nil {
+		t.Fatalf("待测: %v", err)
+	}
+	if got := hashSet(hits); len(got) != 1 || !got[pending.Hex()] {
+		t.Fatalf("待测 returned %v, want only the pending node", got)
+	}
+
+	// 熔断: circuit_open
+	hits, err = cp.ListNodes(NodeFilters{CircuitOpen: &yes})
+	if err != nil {
+		t.Fatalf("熔断: %v", err)
+	}
+	if got := hashSet(hits); len(got) != 1 || !got[tripped.Hex()] {
+		t.Fatalf("熔断 returned %v, want only the tripped node", got)
+	}
+}
+
+// ip_type filters on the class derived from the ASN org.
+func TestListNodes_IPTypeFilter(t *testing.T) {
+	cp, pool, sub := newASNTestService(t)
+
+	residential := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.4","port":443}`), "203.0.113.41")
+	hosting := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.5","port":443}`), "203.0.113.40")
+	unknown := addRoutableNodeForSubscription(t, pool, sub,
+		[]byte(`{"type":"ss","server":"10.10.10.6","port":443}`), "203.0.113.99")
+
+	res := "residential"
+	hits, err := cp.ListNodes(NodeFilters{IPType: &res})
+	if err != nil {
+		t.Fatalf("ip_type=residential: %v", err)
+	}
+	if got := hashSet(hits); len(got) != 1 || !got[residential.Hex()] {
+		t.Fatalf("ip_type=residential returned %v", got)
+	}
+
+	host := "hosting"
+	hits, err = cp.ListNodes(NodeFilters{IPType: &host})
+	if err != nil {
+		t.Fatalf("ip_type=hosting: %v", err)
+	}
+	got := hashSet(hits)
+	if len(got) != 1 || !got[hosting.Hex()] {
+		t.Fatalf("ip_type=hosting returned %v", got)
+	}
+	if got[unknown.Hex()] {
+		t.Fatal("a node without ASN data must not match a concrete ip_type")
+	}
+}

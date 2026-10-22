@@ -123,6 +123,15 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 		if v := strings.TrimSpace(q.Get("asn")); v != "" {
 			filters.ASN = &v
 		}
+		if v := strings.ToLower(strings.TrimSpace(q.Get("ip_type"))); v != "" {
+			switch v {
+			case "residential", "hosting", "mobile":
+				filters.IPType = &v
+			default:
+				writeInvalidArgument(w, "ip_type: must be residential, hosting, or mobile")
+				return
+			}
+		}
 
 		// Legacy deep links used a single status field; map them onto the two
 		// independent switches instead of rejecting them.

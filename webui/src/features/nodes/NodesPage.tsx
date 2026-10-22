@@ -34,6 +34,7 @@ type NodeFilterDraft = {
   region: string;
   egress_ip: string;
   asn: string;
+  ip_type: string;
   status: NodeStatusFilter;
 };
 
@@ -44,6 +45,7 @@ const defaultFilterDraft: NodeFilterDraft = {
   region: "",
   egress_ip: "",
   asn: "",
+  ip_type: "",
   status: "all",
 };
 
@@ -138,6 +140,7 @@ function draftFromQuery(search: string): NodeFilterDraft {
     region: trimQueryValue(params, "region").toUpperCase(),
     egress_ip: trimQueryValue(params, "egress_ip"),
     asn: trimQueryValue(params, "asn"),
+    ip_type: trimQueryValue(params, "ip_type").toLowerCase(),
     status: statusFromQuery(params),
   };
 }
@@ -157,7 +160,8 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
       enabled = true;
       has_outbound = true;
       circuit_open = false;
-      pending_test = undefined;
+      // Never-probed nodes carry the 待测 badge, so 健康 must exclude them.
+      pending_test = false;
       break;
     case "circuit_open":
       enabled = undefined;
@@ -168,7 +172,8 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
     case "pending_test":
       enabled = undefined;
       has_outbound = undefined;
-      circuit_open = undefined;
+      // A tripped breaker wins the badge, so 待测 must exclude it.
+      circuit_open = false;
       pending_test = true;
       break;
     case "error":
@@ -199,6 +204,7 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
     region: draft.region,
     egress_ip: draft.egress_ip,
     asn: draft.asn,
+    ip_type: draft.ip_type || undefined,
     enabled,
     has_outbound,
     circuit_open,
@@ -241,6 +247,13 @@ function syncUrlFromDraft(draft: NodeFilterDraft): void {
 
   const search = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+}
+
+function ipTypeText(t: (key: string) => string, value: string): string {
+  if (value === "hosting") return t("机房");
+  if (value === "residential") return t("住宅");
+  if (value === "mobile") return t("移动");
+  return value;
 }
 
 function firstTag(node: { display_tag?: string; tags: { tag: string }[] }): string {
@@ -645,7 +658,8 @@ export function NodesPage() {
         if (!node.asn_number) {
           return "-";
         }
-        const label = `ASN${node.asn_number}${node.asn_org ? ` ${node.asn_org}` : ""}`;
+        const typeLabel = node.ip_type ? ` · ${ipTypeText(t, node.ip_type)}` : "";
+        const label = `ASN${node.asn_number}${node.asn_org ? ` ${node.asn_org}` : ""}${typeLabel}`;
         return (
           <div style={{ maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={label}>
             {label}
@@ -872,6 +886,23 @@ export function NodesPage() {
                 placeholder={t("如 13335 或 Cloudflare")}
                 style={NODE_FILTER_CONTROL_STYLE}
               />
+            </div>
+
+            <div style={NODE_FILTER_ITEM_STYLE}>
+              <label htmlFor="node-ip-type" style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                {t("IP 类型")}
+              </label>
+              <Select
+                id="node-ip-type"
+                value={draftFilters.ip_type}
+                onChange={(event) => handleFilterChange("ip_type", event.target.value)}
+                style={NODE_FILTER_CONTROL_STYLE}
+              >
+                <option value="">{t("全部")}</option>
+                <option value="hosting">{t("机房")}</option>
+                <option value="residential">{t("住宅")}</option>
+                <option value="mobile">{t("移动")}</option>
+              </Select>
             </div>
 
             <div style={NODE_FILTER_ITEM_STYLE}>

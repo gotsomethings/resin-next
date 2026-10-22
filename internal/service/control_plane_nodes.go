@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Resinat/Resin/internal/geoip"
+	"github.com/Resinat/Resin/internal/platform"
 
 	"github.com/Resinat/Resin/internal/node"
 	"github.com/Resinat/Resin/internal/probe"
@@ -30,6 +31,9 @@ type NodeFilters struct {
 	// ASN matches asn_number (substring of its decimal form) or asn_org
 	// (case-insensitive substring). Empty/nil means "no filter".
 	ASN *string
+	// IPType filters by the coarse class derived from the ASN org:
+	// residential / hosting / mobile.
+	IPType *string
 	// PendingTest keeps only nodes that have never been probed:
 	// no egress IP yet, or no probe attempt recorded.
 	PendingTest *bool
@@ -228,6 +232,12 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 			return false
 		}
 	}
+	// IP type filter.
+	if filters.IPType != nil {
+		if !s.nodeMatchesIPType(entry, *filters.IPType) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -251,6 +261,25 @@ func (s *ControlPlaneService) nodeASN(entry *node.NodeEntry) (geoip.ASNInfo, boo
 		return geoip.ASNInfo{}, false
 	}
 	return s.ASN.Lookup(egressIP)
+}
+
+// nodeIPType derives the coarse IP class from the node's ASN org. An empty
+// string means "no ASN data", which never matches a concrete type filter.
+func (s *ControlPlaneService) nodeIPType(entry *node.NodeEntry) string {
+	info, ok := s.nodeASN(entry)
+	if !ok {
+		return ""
+	}
+	return platform.ClassifyIPType(platform.ASNInfo{ASN: info.Number, Org: info.Org})
+}
+
+// nodeMatchesIPType reports whether the node's derived class equals the filter.
+func (s *ControlPlaneService) nodeMatchesIPType(entry *node.NodeEntry, want string) bool {
+	want = strings.ToLower(strings.TrimSpace(want))
+	if want == "" {
+		return true
+	}
+	return s.nodeIPType(entry) == want
 }
 
 // nodeMatchesASN reports whether a node's ASN number or organization matches

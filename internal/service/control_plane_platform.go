@@ -810,6 +810,8 @@ type NodeSummary struct {
 	LastEgressUpdateAttempt          string    `json:"last_egress_update_attempt,omitempty"`
 	ASNNumber                        uint32    `json:"asn_number"`
 	ASNOrg                           string    `json:"asn_org,omitempty"`
+	// IPType is the coarse class derived from the ASN org (residential/hosting).
+	IPType string `json:"ip_type,omitempty"`
 	// PendingTest is true while the node has never been probed: no egress IP
 	// yet, or no probe attempt recorded.
 	PendingTest bool      `json:"pending_test"`
@@ -862,6 +864,7 @@ func (s *ControlPlaneService) nodeEntryToSummary(h node.Hash, entry *node.NodeEn
 		ns.ASNNumber = info.Number
 		ns.ASNOrg = info.Org
 	}
+	ns.IPType = s.nodeIPType(entry)
 	ns.PendingTest = nodeIsPendingTest(entry)
 
 	if leu := entry.LastEgressUpdate.Load(); leu > 0 {

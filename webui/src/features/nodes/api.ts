@@ -24,6 +24,7 @@ type ApiNodeSummary = Omit<NodeSummary, "tags"> & {
   last_egress_update_attempt?: string | null;
   asn_number?: number | null;
   asn_org?: string | null;
+  ip_type?: string | null;
   pending_test?: boolean | null;
 };
 
@@ -44,6 +45,7 @@ function normalizeNode(raw: ApiNodeSummary): NodeSummary {
     last_egress_update_attempt: raw.last_egress_update_attempt || "",
     asn_number: typeof raw.asn_number === "number" ? raw.asn_number : 0,
     asn_org: raw.asn_org || "",
+    ip_type: raw.ip_type || "",
     pending_test: Boolean(raw.pending_test),
   };
 
@@ -81,6 +83,7 @@ export async function listNodes(filters: NodeListQuery): Promise<PageResponse<No
   appendIfNotEmpty("egress_ip", filters.egress_ip);
   appendIfNotEmpty("probed_since", filters.probed_since);
   appendIfNotEmpty("asn", filters.asn);
+  appendIfNotEmpty("ip_type", filters.ip_type);
 
   if (filters.circuit_open !== undefined) {
     query.set("circuit_open", String(filters.circuit_open));

@@ -15,8 +15,16 @@ import (
 type stubASNReader struct{}
 
 func (stubASNReader) LookupASN(ip netip.Addr) (geoip.ASNInfo, bool) {
-	if ip.String() == "203.0.113.10" {
+	switch ip.String() {
+	case "203.0.113.10":
+		// No hosting keyword -> residential.
 		return geoip.ASNInfo{Number: 13335, Org: "Cloudflare, Inc."}, true
+	case "203.0.113.40":
+		// "amazon" is a hosting keyword.
+		return geoip.ASNInfo{Number: 16509, Org: "Amazon.com, Inc."}, true
+	case "203.0.113.41":
+		// No hosting/mobile keyword -> residential.
+		return geoip.ASNInfo{Number: 7922, Org: "Comcast Cable Communications, LLC"}, true
 	}
 	return geoip.ASNInfo{}, false
 }
