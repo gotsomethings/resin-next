@@ -118,6 +118,7 @@ var platformPatchAllowedFields = map[string]bool{
 	"latency_p95_max_ms":     true,
 	"min_alive_streak":       true,
 	"min_probe_success_rate": true,
+	"probe_rate_window":      true,
 	"max_last_probe_age":     true,
 	"min_node_age":           true,
 	"egress_ip_version":      true,

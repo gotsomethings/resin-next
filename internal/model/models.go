@@ -23,6 +23,7 @@ type Platform struct {
 	LatencyP95MaxMs      int     `json:"latency_p95_max_ms"`
 	MinAliveStreak       int     `json:"min_alive_streak"`
 	MinProbeSuccessRate  float64 `json:"min_probe_success_rate"`
+	ProbeRateWindowNs    int64   `json:"probe_rate_window_ns"`
 	MaxLastProbeAgeNs    int64   `json:"max_last_probe_age_ns"`
 	MinNodeAgeNs         int64   `json:"min_node_age_ns"`
 	EgressIPVersion      string  `json:"egress_ip_version"`

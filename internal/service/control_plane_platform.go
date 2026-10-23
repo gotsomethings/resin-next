@@ -41,6 +41,7 @@ type PlatformResponse struct {
 	LatencyP95MaxMs      int      `json:"latency_p95_max_ms"`
 	MinAliveStreak       int      `json:"min_alive_streak"`
 	MinProbeSuccessRate  float64  `json:"min_probe_success_rate"`
+	ProbeRateWindow      string   `json:"probe_rate_window"`
 	MaxLastProbeAge      string   `json:"max_last_probe_age"`
 	MinNodeAge           string   `json:"min_node_age"`
 	EgressIPVersion      string   `json:"egress_ip_version"`
@@ -94,6 +95,7 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		LatencyP95MaxMs:      p.LatencyP95MaxMs,
 		MinAliveStreak:       p.MinAliveStreak,
 		MinProbeSuccessRate:  p.MinProbeSuccessRate,
+		ProbeRateWindow:      time.Duration(p.ProbeRateWindowNs).String(),
 		MaxLastProbeAge:      time.Duration(p.MaxLastProbeAgeNs).String(),
 		MinNodeAge:           time.Duration(p.MinNodeAgeNs).String(),
 		EgressIPVersion:      p.EgressIPVersion,
@@ -448,6 +450,7 @@ type CreatePlatformRequest struct {
 	LatencyP95MaxMs      *int     `json:"latency_p95_max_ms"`
 	MinAliveStreak       *int     `json:"min_alive_streak"`
 	MinProbeSuccessRate  *float64 `json:"min_probe_success_rate"`
+	ProbeRateWindow      *string  `json:"probe_rate_window"`
 	MaxLastProbeAge      *string  `json:"max_last_probe_age"`
 	MinNodeAge           *string  `json:"min_node_age"`
 	EgressIPVersion      *string  `json:"egress_ip_version"`
@@ -758,6 +761,7 @@ type PlatformSpecFilter struct {
 	LatencyP95MaxMs      int      `json:"latency_p95_max_ms"`
 	MinAliveStreak       int      `json:"min_alive_streak"`
 	MinProbeSuccessRate  float64  `json:"min_probe_success_rate"`
+	ProbeRateWindow      string   `json:"probe_rate_window"`
 	MaxLastProbeAge      string   `json:"max_last_probe_age"`
 	MinNodeAge           string   `json:"min_node_age"`
 	EgressIPVersion      string   `json:"egress_ip_version"`

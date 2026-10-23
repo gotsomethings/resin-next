@@ -15,6 +15,7 @@ type policyPatch struct {
 	latencyP95MaxMs     *int
 	minAliveStreak      *int
 	minProbeSuccessRate *float64
+	probeRateWindow     *time.Duration
 	maxLastProbeAge     *time.Duration
 	minNodeAge          *time.Duration
 	egressIPVersion     *string
@@ -98,6 +99,11 @@ func policyPatchFromMerge(patch mergePatch) (policyPatch, *ServiceError) {
 		p.minProbeSuccessRate = floatPtr(v)
 	}
 
+	if d, ok, derr := patch.optionalDurationString("probe_rate_window"); derr != nil {
+		return p, derr
+	} else if ok {
+		p.probeRateWindow = &d
+	}
 	if d, ok, derr := patch.optionalDurationString("max_last_probe_age"); derr != nil {
 		return p, derr
 	} else if ok {
@@ -157,6 +163,9 @@ func applyPolicyPatch(dst *platform.Policy, p policyPatch) *ServiceError {
 	}
 	if p.minProbeSuccessRate != nil {
 		dst.MinProbeSuccessRate = *p.minProbeSuccessRate
+	}
+	if p.probeRateWindow != nil {
+		dst.MinProbeSuccessRateWindow = *p.probeRateWindow
 	}
 	if p.maxLastProbeAge != nil {
 		dst.MaxLastProbeAge = *p.maxLastProbeAge

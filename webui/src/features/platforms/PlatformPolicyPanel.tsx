@@ -33,6 +33,7 @@ type FormState = {
   latency_p95_max_ms: number;
   min_alive_streak: number;
   min_probe_success_rate: number;
+  probe_rate_window_minutes: number;
   max_last_probe_age: string;
   min_node_age: string;
   egress_ip_version: string;
@@ -68,6 +69,7 @@ function toForm(platform: Platform): FormState {
     latency_p95_max_ms: atLeast(p.latency_p95_max_ms, 0, 0),
     min_alive_streak: atLeast(p.min_alive_streak, 0, 0),
     min_probe_success_rate: withinRange(p.min_probe_success_rate, 0, 1, 0),
+    probe_rate_window_minutes: durationMinutesOrDefault(p.probe_rate_window, 1440),
     max_last_probe_age: p.max_last_probe_age ?? "0s",
     min_node_age: p.min_node_age ?? "0s",
     egress_ip_version: p.egress_ip_version ?? "",
@@ -134,6 +136,14 @@ function withinRange(v: number | undefined, min: number, max: number, fallback: 
   const n = Math.trunc(v);
   if (n < min || n > max) return fallback;
   return n;
+}
+
+function durationMinutesOrDefault(v: string | undefined, fallback: number): number {
+  if (!v) return fallback;
+  const ms = parseGoDuration(v);
+  if (ms === null || ms <= 0) return fallback;
+  const minutes = Math.round(ms / 60000);
+  return minutes < 10 ? fallback : minutes;
 }
 
 function positiveDurationOrDefault(v: string | undefined, fallback: string): string {
@@ -227,6 +237,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
         latency_p95_max_ms: form.latency_p95_max_ms,
         min_alive_streak: form.min_alive_streak,
         min_probe_success_rate: form.min_probe_success_rate,
+        probe_rate_window: `${form.probe_rate_window_minutes}m`,
         max_last_probe_age: form.max_last_probe_age,
         min_node_age: form.min_node_age,
         egress_ip_version: form.egress_ip_version,
@@ -295,6 +306,9 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
     if (f.failover_max_switches < 1 || f.failover_max_switches > 10) {
       out.failover_max_switches = t("必须是 {{min}}–{{max}} 之间的整数", { min: 1, max: 10 });
+    }
+    if (f.probe_rate_window_minutes < 10) {
+      out.probe_rate_window_minutes = t("必须是 ≥ {{min}} 的整数", { min: 10 });
     }
     if (!(f.min_probe_success_rate >= 0 && f.min_probe_success_rate <= 1)) {
       out.min_probe_success_rate = t("必须是 {{min}}–{{max}} 之间的数值", { min: 0, max: 1 });
@@ -547,16 +561,28 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
           <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测通过率")}</label>
-            <Input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={String(form.min_probe_success_rate)}
-              onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })}
-            />
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("按小时桶滚动，无样本时不限制；0=不限")}</p>
-            <FieldError message={errors.min_probe_success_rate} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="muted" style={{ fontSize: 12 }}>{t("近")}</span>
+              <Input
+                type="number"
+                min={10}
+                style={{ width: 96 }}
+                value={String(form.probe_rate_window_minutes)}
+                onChange={(e) => setForm({ ...form, probe_rate_window_minutes: num(e.target.value) })}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>{t("分钟通过率大于")}</span>
+              <Input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                style={{ width: 96 }}
+                value={String(form.min_probe_success_rate)}
+                onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })}
+              />
+            </div>
+            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("窗口最小 10 分钟；通过率 0–1，0=不限")}</p>
+            <FieldError message={errors.probe_rate_window_minutes ?? errors.min_probe_success_rate} />
           </div>
 
           <div>

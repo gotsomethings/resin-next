@@ -24,6 +24,7 @@ export type PlatformPolicyFields = {
   latency_p95_max_ms: number;
   min_alive_streak: number;
   min_probe_success_rate: number;
+  probe_rate_window: string;
   max_last_probe_age: string;
   min_node_age: string;
   egress_ip_version: string;

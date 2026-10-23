@@ -33,6 +33,9 @@ type Policy struct {
 	LatencyP95MaxMs      int
 	MinAliveStreak       int
 	MinProbeSuccessRate  float64 // 0..1
+	// MinProbeSuccessRateWindow is the window the rate is computed over;
+	// 0 means the fixed 24h view.
+	MinProbeSuccessRateWindow time.Duration
 	MaxLastProbeAge      time.Duration
 	MinNodeAge           time.Duration
 	EgressIPVersion      string // "", "v4", "v6"
@@ -45,7 +48,7 @@ type Policy struct {
 // IsZero reports whether no policy dimension is configured.
 func (p Policy) IsZero() bool {
 	return p.LatencyTopN == 0 && p.LatencyMaxMs == 0 && p.LatencyP95MaxMs == 0 &&
-		p.MinAliveStreak == 0 && p.MinProbeSuccessRate == 0 && p.MaxLastProbeAge == 0 &&
+		p.MinAliveStreak == 0 && p.MinProbeSuccessRate == 0 && p.MinProbeSuccessRateWindow == 0 && p.MaxLastProbeAge == 0 &&
 		p.MinNodeAge == 0 && p.EgressIPVersion == "" && len(p.EgressCountryFilters) == 0 &&
 		len(p.ASNFilters) == 0 && len(p.IPTypeFilters) == 0 && len(p.EgressIPFilters) == 0
 }
@@ -66,6 +69,9 @@ func Validate(p Policy) error {
 	}
 	if p.MinProbeSuccessRate < 0 || p.MinProbeSuccessRate > 1 {
 		return errorf("min_probe_success_rate: must be between 0 and 1")
+	}
+	if p.MinProbeSuccessRateWindow > 0 && p.MinProbeSuccessRateWindow < 10*time.Minute {
+		return errorf("probe_rate_window: must be >= 10m")
 	}
 	if p.MaxLastProbeAge < 0 {
 		return errorf("max_last_probe_age: must be >= 0")
@@ -341,7 +347,7 @@ func (p *Platform) evaluateNode(
 	// 9. min_probe_success_rate.
 	if pol.MinProbeSuccessRate > 0 {
 		// No samples => the dimension does not apply (avoids a post-restart empty pool).
-		if rate, ok := entry.ProbeSuccessRate(now); ok && rate < pol.MinProbeSuccessRate {
+		if rate, ok := entry.ProbeSuccessRateWindow(now, pol.MinProbeSuccessRateWindow); ok && rate < pol.MinProbeSuccessRate {
 			return false
 		}
 	}

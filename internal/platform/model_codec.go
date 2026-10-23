@@ -135,6 +135,7 @@ func PolicyFromModel(mp model.Platform) Policy {
 		LatencyP95MaxMs:      mp.LatencyP95MaxMs,
 		MinAliveStreak:       mp.MinAliveStreak,
 		MinProbeSuccessRate:  mp.MinProbeSuccessRate,
+		MinProbeSuccessRateWindow: time.Duration(mp.ProbeRateWindowNs),
 		MaxLastProbeAge:      time.Duration(mp.MaxLastProbeAgeNs),
 		MinNodeAge:           time.Duration(mp.MinNodeAgeNs),
 		EgressIPVersion:      mp.EgressIPVersion,
@@ -152,6 +153,7 @@ func ApplyPolicyToModel(p Policy, mp *model.Platform) {
 	mp.LatencyP95MaxMs = p.LatencyP95MaxMs
 	mp.MinAliveStreak = p.MinAliveStreak
 	mp.MinProbeSuccessRate = p.MinProbeSuccessRate
+	mp.ProbeRateWindowNs = int64(p.MinProbeSuccessRateWindow)
 	mp.MaxLastProbeAgeNs = int64(p.MaxLastProbeAge)
 	mp.MinNodeAgeNs = int64(p.MinNodeAge)
 	mp.EgressIPVersion = p.EgressIPVersion
