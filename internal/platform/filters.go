@@ -21,6 +21,9 @@ const (
 	IPTypeResidential = "residential"
 	IPTypeHosting     = "hosting"
 	IPTypeMobile      = "mobile"
+	// IPTypeUnknown is the class for an org name that matches no known keyword
+	// (or is empty). Unmatched never guesses a concrete class.
+	IPTypeUnknown = "unknown"
 )
 
 // hostingKeywords classifies an ASN org as datacenter/hosting.
@@ -31,19 +34,45 @@ var hostingKeywords = []string{
 	"contabo", "oracle", "leaseweb", "colo", "idc", "m247", "choopa",
 }
 
-// ClassifyIPType derives a coarse IP type from an ASN org name.
-// Unknown org falls back to "hosting" (fail-closed for residential filters).
+// mobileKeywords classifies an ASN org as a mobile/cellular carrier.
+var mobileKeywords = []string{
+	"mobile", "cellular", "wireless", "lte", "4g", "5g",
+}
+
+// residentialKeywords classifies an ASN org as a consumer/residential ISP.
+var residentialKeywords = []string{
+	"chinanet", "china telecom", "china unicom", "telecom", "unicom",
+	"comcast", "verizon", "at&t", "charter", "cox", "centurylink",
+	"frontier", "spectrum", "bt ", "virgin media", "kddi", "softbank",
+	"broadband", "telefonica", "orange", "viettel", "fpt", "vnpt",
+	"korea telecom", "sk broadband", "lg u+", "airtel", "jio", "bsnl",
+}
+
+// ClassifyIPType derives a coarse IP type from an ASN org name. Keyword
+// groups are matched in order: datacenter then mobile then residential. An org
+// that matches none of them (or is empty) is IPTypeUnknown, never a guess, so
+// a datacenter with an unrecognised name is not reported as residential.
 func ClassifyIPType(info ASNInfo) string {
 	org := strings.ToLower(strings.TrimSpace(info.Org))
 	if org == "" {
-		return IPTypeHosting
+		return IPTypeUnknown
 	}
 	for _, kw := range hostingKeywords {
 		if strings.Contains(org, kw) {
 			return IPTypeHosting
 		}
 	}
-	return IPTypeResidential
+	for _, kw := range mobileKeywords {
+		if strings.Contains(org, kw) {
+			return IPTypeMobile
+		}
+	}
+	for _, kw := range residentialKeywords {
+		if strings.Contains(org, kw) {
+			return IPTypeResidential
+		}
+	}
+	return IPTypeUnknown
 }
 
 // --- egress_ip_version ---
@@ -135,14 +164,15 @@ func MatchASNFilter(info ASNInfo, ok bool, filters []string) bool {
 
 // --- ip_type_filters ---
 
-// ValidateIPTypeFilters validates residential/hosting/mobile with optional "!".
+// ValidateIPTypeFilters validates residential/hosting/mobile/unknown with an
+// optional "!" prefix.
 func ValidateIPTypeFilters(filters []string) error {
 	for i, raw := range filters {
 		s := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(raw, "!")))
 		switch s {
-		case IPTypeResidential, IPTypeHosting, IPTypeMobile:
+		case IPTypeResidential, IPTypeHosting, IPTypeMobile, IPTypeUnknown:
 		default:
-			return fmt.Errorf("ip_type_filters[%d]: must be residential, hosting, or mobile (optionally prefixed with !), got %q", i, raw)
+			return fmt.Errorf("ip_type_filters[%d]: must be residential, hosting, mobile, or unknown (optionally prefixed with !), got %q", i, raw)
 		}
 	}
 	return nil

@@ -231,4 +231,13 @@ func TestListNodes_IPTypeFilter(t *testing.T) {
 	if got[unknown.Hex()] {
 		t.Fatal("a node without ASN data must not match a concrete ip_type")
 	}
+
+	unk := "unknown"
+	hits, err = cp.ListNodes(NodeFilters{IPType: &unk})
+	if err != nil {
+		t.Fatalf("ip_type=unknown: %v", err)
+	}
+	if got := hashSet(hits); len(got) != 1 || !got[unknown.Hex()] {
+		t.Fatalf("ip_type=unknown returned %v, want only the node with no ASN data", got)
+	}
 }

@@ -902,6 +902,7 @@ export function NodesPage() {
                 <option value="hosting">{t("机房")}</option>
                 <option value="residential">{t("住宅")}</option>
                 <option value="mobile">{t("移动")}</option>
+                <option value="unknown">{t("其他")}</option>
               </Select>
             </div>
 

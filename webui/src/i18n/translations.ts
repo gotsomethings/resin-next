@@ -211,6 +211,8 @@ Note: Once enabled, requests without authentication information are rejected ins
   "ASN 数据库更新任务已执行": "ASN database update task has been triggered",
   "GeoIP 与 ASN 数据库": "GeoIP and ASN databases",
   "GeoIP 库状态": "GeoIP database status",
+  "其他": "Other",
+  "非其他": "Not other",
   "数据库状态": "Database Status",
   "数据库更新时间": "Database Updated At",
   "数据库已加载": "Database loaded",

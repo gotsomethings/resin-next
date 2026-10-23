@@ -465,8 +465,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
               <option value="">{t("不限")}</option>
               <option value="residential">{t("住宅")}</option>
               <option value="hosting">{t("机房")}</option>
+              <option value="mobile">{t("移动")}</option>
+              <option value="unknown">{t("其他")}</option>
               <option value="!hosting">{t("非机房")}</option>
               <option value="!residential">{t("非住宅")}</option>
+              <option value="!unknown">{t("非其他")}</option>
             </Select>
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("按 ASN 组织名启发式判定")}</p>
             {!asnAvailable && (

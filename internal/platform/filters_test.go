@@ -74,12 +74,23 @@ func TestMatchASNFilter(t *testing.T) {
 func TestMatchIPTypeFilter(t *testing.T) {
 	host := ASNInfo{ASN: 16509, Org: "Amazon.com, Inc."}
 	res := ASNInfo{ASN: 4134, Org: "Chinanet"}
+	mob := ASNInfo{ASN: 9808, Org: "China Mobile Communications Corporation"}
+	unk := ASNInfo{ASN: 64512, Org: "Some Local Network"}
 
 	if ClassifyIPType(host) != IPTypeHosting {
 		t.Fatal("amazon must classify as hosting")
 	}
 	if ClassifyIPType(res) != IPTypeResidential {
 		t.Fatal("chinanet must classify as residential")
+	}
+	if ClassifyIPType(mob) != IPTypeMobile {
+		t.Fatal("china mobile must classify as mobile")
+	}
+	if ClassifyIPType(unk) != IPTypeUnknown {
+		t.Fatal("an unrecognised org must classify as unknown, not residential")
+	}
+	if ClassifyIPType(ASNInfo{}) != IPTypeUnknown {
+		t.Fatal("an empty org must classify as unknown")
 	}
 	if !MatchIPTypeFilter(res, true, []string{"residential"}) {
 		t.Fatal("residential include must pass")
@@ -90,11 +101,26 @@ func TestMatchIPTypeFilter(t *testing.T) {
 	if !MatchIPTypeFilter(host, true, []string{"!residential"}) {
 		t.Fatal("hosting must pass !residential")
 	}
+	if !MatchIPTypeFilter(unk, true, []string{"unknown"}) {
+		t.Fatal("unknown include must pass for an unrecognised org")
+	}
+	if MatchIPTypeFilter(host, true, []string{"unknown"}) {
+		t.Fatal("hosting must not pass an unknown include")
+	}
+	if !MatchIPTypeFilter(host, true, []string{"!unknown"}) {
+		t.Fatal("hosting must pass !unknown")
+	}
+	if MatchIPTypeFilter(unk, true, []string{"!unknown"}) {
+		t.Fatal("an unknown node must not pass !unknown")
+	}
 	if MatchIPTypeFilter(host, false, []string{"hosting"}) {
 		t.Fatal("unknown must fail closed")
 	}
 	if err := ValidateIPTypeFilters([]string{"mobile"}); err != nil {
 		t.Fatalf("mobile must validate: %v", err)
+	}
+	if err := ValidateIPTypeFilters([]string{"unknown", "!unknown"}); err != nil {
+		t.Fatalf("unknown must validate: %v", err)
 	}
 	if err := ValidateIPTypeFilters([]string{"bogus"}); err == nil {
 		t.Fatal("bogus type must be rejected")

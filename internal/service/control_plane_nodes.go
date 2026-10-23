@@ -32,7 +32,8 @@ type NodeFilters struct {
 	// (case-insensitive substring). Empty/nil means "no filter".
 	ASN *string
 	// IPType filters by the coarse class derived from the ASN org:
-	// residential / hosting / mobile.
+	// residential / hosting / mobile / unknown. A node with no ASN data is
+	// treated as unknown.
 	IPType *string
 	// PendingTest keeps only nodes that have never been probed:
 	// no egress IP yet, or no probe attempt recorded.
@@ -263,12 +264,13 @@ func (s *ControlPlaneService) nodeASN(entry *node.NodeEntry) (geoip.ASNInfo, boo
 	return s.ASN.Lookup(egressIP)
 }
 
-// nodeIPType derives the coarse IP class from the node's ASN org. An empty
-// string means "no ASN data", which never matches a concrete type filter.
+// nodeIPType derives the coarse IP class from the node's ASN org. A node with
+// no ASN data (no egress IP yet, or not covered by the ASN DB) is "unknown" so
+// the 其他 filter can surface it instead of it vanishing from every class.
 func (s *ControlPlaneService) nodeIPType(entry *node.NodeEntry) string {
 	info, ok := s.nodeASN(entry)
 	if !ok {
-		return ""
+		return platform.IPTypeUnknown
 	}
 	return platform.ClassifyIPType(platform.ASNInfo{ASN: info.Number, Org: info.Org})
 }

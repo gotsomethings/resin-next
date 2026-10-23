@@ -60,7 +60,7 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 8. `egress_ip_version` — v4 / v6
 9. `egress_country_filters` — 按**实测出口 IP** 真实归属国（GeoIP）
 10. `asn_filters` — ASN 白/黑（需 GeoLite2-ASN，缺库 fail-closed）
-11. `ip_type_filters` — 住宅/机房（ASN 组织名启发式）
+11. `ip_type_filters` — 住宅/机房/移动/其他：按 ASN 组织名关键词启发式归类（机房关键词 → 机房，移动关键词 → 移动，住宅关键词 → 住宅）；**未命中任何关键词或组织名为空 → 其他，不再默认归为住宅**。平台层匹配对 ASN 无数据的节点仍 fail-closed（既不匹配具体类型，也不匹配「其他」）；节点池列表的「其他」把这类无数据节点一并纳入。
 12. `egress_ip_filters` — 手动白/黑，支持 `!` 排除，IP 与 CIDR
 
 若平台配置了上述任一探测类维度（`min_probe_success_rate` / `min_alive_streak` / `max_last_probe_age` / `latency_p95_max_ms`）但 `probe_enabled=false`，启动时记录 WARN（平台名 + 不生效的维度），且这些维度不会生效；系统不会自动开启探测。
