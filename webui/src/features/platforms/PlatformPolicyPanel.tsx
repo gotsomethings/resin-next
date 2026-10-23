@@ -422,16 +422,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <FieldError message={errors.probe_interval} />
           </div>
 
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测范围")}</label>
-            <Select value={form.probe_scope} onChange={(e) => setForm({ ...form, probe_scope: e.target.value })}>
-              <option value="untested,failed,blacklisted">{t("未探测 / 失败过 / 黑名单中")}</option>
-              <option value="untested">{t("仅未探测")}</option>
-              <option value="failed">{t("仅失败过")}</option>
-              <option value="blacklisted">{t("仅黑名单")}</option>
-            </Select>
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("绝不整池扫")}</p>
-          </div>
         </div>
 
         <div
