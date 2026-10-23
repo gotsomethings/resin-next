@@ -14,8 +14,19 @@ const (
 	// DefaultP95SampleSize is the bounded raw-latency sample count per node.
 	DefaultP95SampleSize = 32
 
+	// DefaultProbeWindowSamples bounds the raw (timestamp,pass) sample ring used
+	// for arbitrary-window rate queries. At a 30m probe interval 64 samples cover
+	// ~32h, which is more than the largest supported window.
+	DefaultProbeWindowSamples = 64
+
 	probeWindowBucket = time.Hour
 )
+
+// probeSample is one recorded probe outcome used for windowed rates.
+type probeSample struct {
+	tsNs int64
+	pass bool
+}
 
 // probeBucket is one hourly slot of the 24h rolling window.
 type probeBucket struct {
@@ -30,6 +41,12 @@ type SlidingWindow struct {
 	mu      sync.Mutex
 	buckets []probeBucket
 	next    int
+
+	// Raw samples backing StatsWindow; buckets stay authoritative for the
+	// fixed 24h view.
+	samples      []probeSample
+	sampleNext   int
+	sampleFilled bool
 }
 
 // NewSlidingWindow creates a window with n hourly buckets.
@@ -37,7 +54,10 @@ func NewSlidingWindow(n int) *SlidingWindow {
 	if n <= 0 {
 		n = DefaultProbeWindowSize
 	}
-	return &SlidingWindow{buckets: make([]probeBucket, n)}
+	return &SlidingWindow{
+		buckets: make([]probeBucket, n),
+		samples: make([]probeSample, DefaultProbeWindowSamples),
+	}
 }
 
 // Record adds one probe outcome at time now.
@@ -49,6 +69,14 @@ func (w *SlidingWindow) Record(pass bool, now time.Time) {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	if len(w.samples) > 0 {
+		w.samples[w.sampleNext] = probeSample{tsNs: now.UnixNano(), pass: pass}
+		w.sampleNext = (w.sampleNext + 1) % len(w.samples)
+		if w.sampleNext == 0 {
+			w.sampleFilled = true
+		}
+	}
 
 	for i := range w.buckets {
 		if w.buckets[i].start == hour {
@@ -83,6 +111,41 @@ func (w *SlidingWindow) Stats(now time.Time) (succ, total int) {
 		}
 		succ += int(b.succ)
 		total += int(b.total)
+	}
+	return succ, total
+}
+
+// StatsWindow returns (successes, total) among probe samples recorded within
+// the last window relative to now. A non-positive window falls back to the
+// fixed 24h bucket view.
+func (w *SlidingWindow) StatsWindow(now time.Time, window time.Duration) (succ, total int) {
+	if w == nil {
+		return 0, 0
+	}
+	if window <= 0 {
+		return w.Stats(now)
+	}
+	horizon := now.Add(-window).UnixNano()
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	sample := func(s probeSample) {
+		if s.tsNs >= horizon {
+			total++
+			if s.pass {
+				succ++
+			}
+		}
+	}
+	if w.sampleFilled {
+		for _, s := range w.samples {
+			sample(s)
+		}
+		return succ, total
+	}
+	for _, s := range w.samples[:w.sampleNext] {
+		sample(s)
 	}
 	return succ, total
 }

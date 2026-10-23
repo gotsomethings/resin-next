@@ -350,6 +350,19 @@ func (e *NodeEntry) RecordProbeResult(pass bool, lat time.Duration, now time.Tim
 	}
 }
 
+// ProbeSuccessRateWindow returns the success ratio among probe samples recorded
+// within window. ok=false means "no samples inside the window".
+func (e *NodeEntry) ProbeSuccessRateWindow(now time.Time, window time.Duration) (float64, bool) {
+	if e == nil || e.ProbeWindow == nil {
+		return 0, false
+	}
+	succ, total := e.ProbeWindow.StatsWindow(now, window)
+	if total == 0 {
+		return 0, false
+	}
+	return float64(succ) / float64(total), true
+}
+
 // ProbeSuccessRate returns the 24h success ratio. ok=false means "no samples".
 func (e *NodeEntry) ProbeSuccessRate(now time.Time) (float64, bool) {
 	if e == nil || e.ProbeWindow == nil {
