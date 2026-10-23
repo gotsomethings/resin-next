@@ -718,7 +718,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
       </section>
 
       <section className="syscfg-section">
-        <h4>{t("出口 IP 台账")}</h4>
+        <h4>{t("IP 列表状态")}</h4>
         <p className="muted">{t("每个出口 IP 的状态、失败计数与洗白进度。")}</p>
 
         <div className="policy-toolbar" style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>

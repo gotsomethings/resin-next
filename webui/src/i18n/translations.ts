@@ -215,6 +215,7 @@ Note: Once enabled, requests without authentication information are rejected ins
   "非其他": "Not other",
   "未知": "Unknown",
   "已拉黑": "Blacklisted",
+  "IP 列表状态": "IP list status",
   "必须是 ≥ {{min}} 的整数": "Must be an integer ≥ {{min}}",
   "必须是 {{min}}–{{max}} 之间的整数": "Must be an integer between {{min}} and {{max}}",
   "必须是 {{min}}–{{max}} 之间的数值": "Must be a number between {{min}} and {{max}}",

@@ -1025,8 +1025,10 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 			return nil, internal("list platform egress ips", err)
 		}
 	}
-	out := make([]PlatformEgressIPResponse, 0, len(rows))
+	out := make([]PlatformEgressIPResponse, 0, len(rows)+len(nodeCounts))
+	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
+		seen[r.IP] = struct{}{}
 		out = append(out, PlatformEgressIPResponse{
 			IP:            r.IP,
 			State:         r.State,
@@ -1038,6 +1040,19 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 			FirstSeen:     formatUnixNs(r.FirstSeenNs),
 			LastSeen:      formatUnixNs(r.LastSeenNs),
 			NodeCount:     nodeCounts[r.IP],
+		})
+	}
+	// Every egress IP currently in the pool is listed as well, so this view is a
+	// complete IP list rather than only the IPs the platform probe has judged.
+	// Unjudged IPs carry state "unknown".
+	for ip, count := range nodeCounts {
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		out = append(out, PlatformEgressIPResponse{
+			IP:        ip,
+			State:     "unknown",
+			NodeCount: count,
 		})
 	}
 	return out, nil
