@@ -125,10 +125,10 @@ func HandleListNodes(cp *service.ControlPlaneService) http.HandlerFunc {
 		}
 		if v := strings.ToLower(strings.TrimSpace(q.Get("ip_type"))); v != "" {
 			switch v {
-			case "residential", "hosting", "mobile":
+			case "residential", "hosting", "mobile", "unknown":
 				filters.IPType = &v
 			default:
-				writeInvalidArgument(w, "ip_type: must be residential, hosting, or mobile")
+				writeInvalidArgument(w, "ip_type: must be residential, hosting, mobile, or unknown")
 				return
 			}
 		}

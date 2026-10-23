@@ -220,6 +220,7 @@ const URL_FILTER_KEYS = [
   "region",
   "egress_ip",
   "asn",
+  "ip_type",
   "status",
   "enabled",
   "has_outbound",
@@ -243,6 +244,7 @@ function syncUrlFromDraft(draft: NodeFilterDraft): void {
   if (draft.region) params.set("region", draft.region);
   if (draft.egress_ip) params.set("egress_ip", draft.egress_ip);
   if (draft.asn) params.set("asn", draft.asn);
+  if (draft.ip_type) params.set("ip_type", draft.ip_type);
   if (draft.status !== "all") params.set("status", draft.status);
 
   const search = params.toString();
@@ -253,6 +255,7 @@ function ipTypeText(t: (key: string) => string, value: string): string {
   if (value === "hosting") return t("机房");
   if (value === "residential") return t("住宅");
   if (value === "mobile") return t("移动");
+  if (value === "unknown") return t("其他");
   return value;
 }
 
@@ -658,13 +661,23 @@ export function NodesPage() {
         if (!node.asn_number) {
           return "-";
         }
-        const typeLabel = node.ip_type ? ` · ${ipTypeText(t, node.ip_type)}` : "";
-        const label = `ASN${node.asn_number}${node.asn_org ? ` ${node.asn_org}` : ""}${typeLabel}`;
+        const label = `ASN${node.asn_number}${node.asn_org ? ` ${node.asn_org}` : ""}`;
         return (
           <div style={{ maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={label}>
             {label}
           </div>
         );
+      },
+    }),
+    col.display({
+      id: "ip_type",
+      header: t("IP 类型"),
+      cell: (info) => {
+        const node = info.row.original;
+        if (!node.ip_type) {
+          return "-";
+        }
+        return ipTypeText(t, node.ip_type);
       },
     }),
     col.display({
