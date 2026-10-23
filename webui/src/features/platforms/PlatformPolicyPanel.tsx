@@ -433,11 +433,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("绝不整池扫")}</p>
           </div>
         </div>
-      </section>
-
-      <section className="syscfg-section">
-        <h4>{t("判决与黑名单")}</h4>
-        <p className="muted">{t("连续失败即拉黑该出口 IP，并在本平台路由中剔除。")}</p>
 
         <div
           style={{
@@ -478,7 +473,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
 
           <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("洗白所需连续通过")}</label>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("复用连续通过探测次数")}</label>
             <Input
               type="number"
               min={1}
@@ -548,7 +543,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
 
           <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("近 24 小时探测通过率")}</label>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测通过率")}</label>
             <Input
               type="number"
               min={0}
@@ -633,14 +628,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("逗号分隔，如 jp,us；! 前缀排除")}</p>
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("手动 IP 黑白")}</label>
-            <Input
-              value={form.egress_ip_filters}
-              onChange={(e) => setForm({ ...form, egress_ip_filters: e.target.value })}
-            />
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("IP 或 CIDR，逗号分隔；! 前缀排除")}</p>
-          </div>
         </div>
 
         {!form.probe_enabled &&
@@ -657,7 +644,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
       </section>
 
       <section className="syscfg-section">
-        <h4>{t("换路设置")}</h4>
+        <h4>{t("高级路由设置")}</h4>
         <p className="muted">{t("仅连接阶段失败时换节点；已建立的传输不重试。")}</p>
 
         <div
@@ -669,7 +656,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           }}
         >
           <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("应用换路")}</label>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("应用高级路由")}</label>
             <div style={{ display: "flex", alignItems: "center", height: 36 }}>
               <Switch
                 checked={form.failover_enabled}
@@ -718,8 +705,8 @@ export function PlatformPolicyPanel({ platform }: Props) {
       </section>
 
       <section className="syscfg-section">
-        <h4>{t("IP 列表状态")}</h4>
-        <p className="muted">{t("每个出口 IP 的状态、失败计数与洗白进度。")}</p>
+        <h4>{t("IP 列表")}</h4>
+        <p className="muted">{t("IP 统计口径：未测 / 正常 / 失败 / 拉黑")}</p>
 
         <div className="policy-toolbar" style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>
           <div>
@@ -763,7 +750,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   <th>{t("洗白进度")}</th>
                   <th>{t("最近结果码")}</th>
                   <th>{t("最近探测时间")}</th>
-                  <th>{t("节点数")}</th>
+                  <th>{t("总节点")}</th>
                 </tr>
               </thead>
               <tbody>
