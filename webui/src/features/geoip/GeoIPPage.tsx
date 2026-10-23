@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownToLine, Database, RefreshCw, Search, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, Database, Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -102,7 +102,7 @@ export function GeoIPPage() {
       <header className="module-header">
         <div>
           <h2>{t("资源")}</h2>
-          <p className="module-description">{t("查询 IP 所在地区，并维护 GeoIP 数据库。")}</p>
+          <p className="module-description">{t("查询 IP 所在地区，并维护 GeoIP 与 ASN 数据库")}</p>
         </div>
       </header>
 
@@ -110,14 +110,7 @@ export function GeoIPPage() {
 
       <Card className="platform-cards-container platform-directory-card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div className="list-card-header">
-          <div>
-            <h3>{t("GeoIP(国家)与 ASN 数据库")}</h3>
-            <p>{t("查询 IP 所在地区")}</p>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => void statusQuery.refetch()} disabled={statusQuery.isFetching}>
-            <RefreshCw size={16} className={statusQuery.isFetching ? "spin" : undefined} />
-            {t("刷新")}
-          </Button>
+          <h3>{t("GeoIP 与 ASN 数据库")}</h3>
         </div>
 
         <div className="geoip-layout">

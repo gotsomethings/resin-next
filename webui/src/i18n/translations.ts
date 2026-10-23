@@ -209,8 +209,7 @@ Note: Once enabled, requests without authentication information are rejected ins
   "输入 IP 执行查询": "Enter an IP address to query",
   "GeoIP 数据库更新任务已执行": "GeoIP database update task has been triggered",
   "ASN 数据库更新任务已执行": "ASN database update task has been triggered",
-  "GeoIP(国家)与 ASN 数据库": "GeoIP (country) and ASN databases",
-  "查询 IP 所在地区": "Look up the region of an IP address",
+  "GeoIP 与 ASN 数据库": "GeoIP and ASN databases",
   "GeoIP 库状态": "GeoIP database status",
   "数据库状态": "Database Status",
   "数据库更新时间": "Database Updated At",
@@ -451,8 +450,8 @@ Note: Once enabled, requests without authentication information are rejected ins
   "查看当前平台的租约、请求成功率、延迟和节点情况。":
     "View current platform leases, request success rate, latency, and node status.",
   "查看请求/响应内容。": "View request/response payloads.",
-  "查询 IP 所在地区，并维护 GeoIP 数据库。":
-    "Lookup IP regions and maintain the GeoIP database.",
+  "查询 IP 所在地区，并维护 GeoIP 与 ASN 数据库":
+    "Look up an IP's region and maintain the GeoIP and ASN databases",
   "持久化策略": "Persistence policy",
   "出口 / 区域": "Egress / Region",
   "出口 IP 更新检查间隔": "Egress IP refresh check interval",
