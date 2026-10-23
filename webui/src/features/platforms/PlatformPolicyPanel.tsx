@@ -55,17 +55,17 @@ function toForm(platform: Platform): FormState {
     probe_body: p.probe_body ?? "",
     probe_pass_status: (p.probe_pass_status ?? [200]).join(","),
     probe_follow_redirects: p.probe_follow_redirects ?? true,
-    probe_interval: p.probe_interval ?? "30m0s",
+    probe_interval: positiveDurationOrDefault(p.probe_interval, "30m0s"),
     probe_scope: p.probe_scope ?? "untested,failed,blacklisted",
     verdict_enabled: p.verdict_enabled ?? false,
-    blacklist_threshold: p.blacklist_threshold ?? 3,
-    rehab_interval: p.rehab_interval ?? "6h0m0s",
-    rehab_success_threshold: p.rehab_success_threshold ?? 3,
-    latency_top_n: p.latency_top_n ?? 0,
-    latency_max_ms: p.latency_max_ms ?? 0,
-    latency_p95_max_ms: p.latency_p95_max_ms ?? 0,
-    min_alive_streak: p.min_alive_streak ?? 0,
-    min_probe_success_rate: p.min_probe_success_rate ?? 0,
+    blacklist_threshold: atLeast(p.blacklist_threshold, 1, 3),
+    rehab_interval: positiveDurationOrDefault(p.rehab_interval, "6h0m0s"),
+    rehab_success_threshold: atLeast(p.rehab_success_threshold, 1, 3),
+    latency_top_n: atLeast(p.latency_top_n, 0, 0),
+    latency_max_ms: atLeast(p.latency_max_ms, 0, 0),
+    latency_p95_max_ms: atLeast(p.latency_p95_max_ms, 0, 0),
+    min_alive_streak: atLeast(p.min_alive_streak, 0, 0),
+    min_probe_success_rate: withinRange(p.min_probe_success_rate, 0, 1, 0),
     max_last_probe_age: p.max_last_probe_age ?? "0s",
     min_node_age: p.min_node_age ?? "0s",
     egress_ip_version: p.egress_ip_version ?? "",
@@ -74,8 +74,8 @@ function toForm(platform: Platform): FormState {
     ip_type_filters: (p.ip_type_filters ?? []).join(","),
     egress_ip_filters: (p.egress_ip_filters ?? []).join(","),
     failover_enabled: p.failover_enabled ?? false,
-    failover_max_switches: p.failover_max_switches ?? 3,
-    failover_deadline: p.failover_deadline ?? "15s",
+    failover_max_switches: withinRange(p.failover_max_switches, 1, 10, 3),
+    failover_deadline: positiveDurationOrDefault(p.failover_deadline, "15s"),
     failover_stage: p.failover_stage ?? "connect",
   };
 }
@@ -92,6 +92,73 @@ function splitStatuses(raw: string): number[] {
     .map((s) => Number.parseInt(s, 10))
     .filter((n) => Number.isFinite(n) && n >= 100 && n <= 599);
   return out.length ? out : [200];
+}
+
+// parseGoDuration parses a Go-style duration ("30m", "6h", "1h30m", "15s")
+// into milliseconds, or null when the text is not a valid duration.
+function parseGoDuration(raw: string): number | null {
+  const text = raw.trim();
+  if (!text) return null;
+  if (text === "0") return 0;
+  const re = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g;
+  let total = 0;
+  let consumed = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index !== consumed) return null;
+    consumed = m.index + m[0].length;
+    const v = Number.parseFloat(m[1]);
+    const unit = m[2];
+    const factor =
+      unit === "h" ? 3_600_000 :
+      unit === "m" ? 60_000 :
+      unit === "s" ? 1_000 :
+      unit === "ms" ? 1 :
+      unit === "us" || unit === "µs" ? 0.001 : 0.000001;
+    total += v * factor;
+  }
+  return consumed === text.length ? total : null;
+}
+
+// A constrained number below its minimum is almost always "unset" (0). Render
+// the documented default instead of an invalid value the backend will reject.
+function atLeast(v: number | undefined, min: number, fallback: number): number {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < min) return fallback;
+  return v;
+}
+
+function withinRange(v: number | undefined, min: number, max: number, fallback: number): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  const n = Math.trunc(v);
+  if (n < min || n > max) return fallback;
+  return n;
+}
+
+function positiveDurationOrDefault(v: string | undefined, fallback: string): string {
+  if (!v) return fallback;
+  const ms = parseGoDuration(v);
+  if (ms === null || ms <= 0) return fallback;
+  return v;
+}
+
+// Field-level error, rendered directly under the control it belongs to.
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4, color: "var(--danger)" }}>{message}</p>;
+}
+
+// Turn a backend "<field>: <msg>" validation error into a field key plus a
+// localized message, so it can be shown under that field.
+function mapApiFieldError(
+  error: unknown,
+  t: (text: string, options?: Record<string, unknown>) => string,
+): { field?: string; message: string } {
+  const raw = error instanceof Error ? error.message : "";
+  const m = /^([a-z_]+)\[\d+\]\s*:\s*(.*)$/i.exec(raw) ?? /^([a-z_]+)\s*:\s*(.*)$/i.exec(raw);
+  if (!m) {
+    return { message: formatApiErrorMessage(error, t) };
+  }
+  return { field: m[1], message: t(m[2]) };
 }
 
 function stateBadge(state: string): string {
@@ -111,6 +178,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => toForm(platform));
   const [notice, setNotice] = useState<string>("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [egressState, setEgressState] = useState<"all" | "unknown" | "normal" | "blacklisted">("all");
   const [egressSort, setEgressSort] = useState<"failure_desc" | "failure_asc" | "probe_desc" | "probe_asc" | "ip_asc">(
     "failure_desc",
@@ -175,7 +243,15 @@ export function PlatformPolicyPanel({ platform }: Props) {
       void queryClient.invalidateQueries({ queryKey: ["platform", platform.id] });
       void queryClient.invalidateQueries({ queryKey: ["platform-egress", platform.id] });
     },
-    onError: (error) => setNotice(formatApiErrorMessage(error, t)),
+    onError: (error) => {
+      const mapped = mapApiFieldError(error, t);
+      if (mapped.field) {
+        setErrors((prev) => ({ ...prev, [mapped.field as string]: mapped.message }));
+        setNotice("");
+        return;
+      }
+      setNotice(mapped.message);
+    },
   });
 
   const num = (v: string) => {
@@ -185,6 +261,51 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const rate = (v: string) => {
     const n = Number.parseFloat(v);
     return Number.isFinite(n) ? n : 0;
+  };
+
+  // Client-side mirror of the backend constraints: catching them here keeps the
+  // message localized and puts it under the offending field.
+  const validateForm = (f: FormState): Record<string, string> => {
+    const out: Record<string, string> = {};
+    const intMin = (key: string, value: number, min: number) => {
+      if (!Number.isFinite(value) || value < min) {
+        out[key] = t("必须是 ≥ {{min}} 的整数", { min });
+      }
+    };
+    const dur = (key: string, raw: string, minMs: number) => {
+      const ms = parseGoDuration(raw);
+      if (ms === null) {
+        out[key] = t("必须填写有效时长，如 30m、6h、15s");
+      } else if (ms < minMs) {
+        out[key] = t("必须大于 0");
+      }
+    };
+
+    intMin("blacklist_threshold", f.blacklist_threshold, 1);
+    intMin("rehab_success_threshold", f.rehab_success_threshold, 1);
+    intMin("latency_top_n", f.latency_top_n, 0);
+    intMin("latency_max_ms", f.latency_max_ms, 0);
+    intMin("latency_p95_max_ms", f.latency_p95_max_ms, 0);
+    intMin("min_alive_streak", f.min_alive_streak, 0);
+
+    if (f.failover_max_switches < 1 || f.failover_max_switches > 10) {
+      out.failover_max_switches = t("必须是 {{min}}–{{max}} 之间的整数", { min: 1, max: 10 });
+    }
+    if (!(f.min_probe_success_rate >= 0 && f.min_probe_success_rate <= 1)) {
+      out.min_probe_success_rate = t("必须是 {{min}}–{{max}} 之间的数值", { min: 0, max: 1 });
+    }
+
+    dur("probe_interval", f.probe_interval, 1);
+    dur("rehab_interval", f.rehab_interval, 1);
+    dur("failover_deadline", f.failover_deadline, 1);
+    dur("max_last_probe_age", f.max_last_probe_age, 0);
+    dur("min_node_age", f.min_node_age, 0);
+
+    const codes = splitList(f.probe_pass_status).map((v) => Number.parseInt(v, 10));
+    if (!codes.length || codes.some((n) => !Number.isFinite(n) || n < 100 || n > 599)) {
+      out.probe_pass_status = t("必须填写有效状态码（100–599），逗号分隔");
+    }
+    return out;
   };
   const allEgressRows: EgressIPRow[] = egressQuery.data?.items ?? [];
   const visibleEgressRows = allEgressRows
@@ -280,6 +401,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, probe_pass_status: e.target.value })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("逗号分隔，默认 200；其余一律计失败")}</p>
+            <FieldError message={errors.probe_pass_status} />
           </div>
 
           <div>
@@ -297,6 +419,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测间隔")}</label>
             <Input value={form.probe_interval} onChange={(e) => setForm({ ...form, probe_interval: e.target.value })} />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 30m，勿过勤")}</p>
+            <FieldError message={errors.probe_interval} />
           </div>
 
           <div>
@@ -344,12 +467,14 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, blacklist_threshold: num(e.target.value) })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 3 次")}</p>
+            <FieldError message={errors.blacklist_threshold} />
           </div>
 
           <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("黑名单复探间隔")}</label>
             <Input value={form.rehab_interval} onChange={(e) => setForm({ ...form, rehab_interval: e.target.value })} />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 6h")}</p>
+            <FieldError message={errors.rehab_interval} />
           </div>
 
           <div>
@@ -361,6 +486,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, rehab_success_threshold: num(e.target.value) })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 3 次，中间失败即重计")}</p>
+            <FieldError message={errors.rehab_success_threshold} />
           </div>
         </div>
       </section>
@@ -432,6 +558,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, min_probe_success_rate: rate(e.target.value) })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("按小时桶滚动，无样本时不限制；0=不限")}</p>
+            <FieldError message={errors.min_probe_success_rate} />
           </div>
 
           <div>
@@ -562,6 +689,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, failover_max_switches: num(e.target.value) })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 3，范围 1–10")}</p>
+            <FieldError message={errors.failover_max_switches} />
           </div>
 
           <div>
@@ -571,6 +699,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setForm({ ...form, failover_deadline: e.target.value })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 15s，范围 1s–1m")}</p>
+            <FieldError message={errors.failover_deadline} />
           </div>
 
           <div>
@@ -666,7 +795,19 @@ export function PlatformPolicyPanel({ platform }: Props) {
           gap: 12,
         }}
       >
-        <Button variant="primary" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+        <Button
+          variant="primary"
+          onClick={() => {
+            const next = validateForm(form);
+            setErrors(next);
+            if (Object.keys(next).length > 0) {
+              setNotice("");
+              return;
+            }
+            saveMutation.mutate();
+          }}
+          disabled={saveMutation.isPending}
+        >
           {saveMutation.isPending ? t("保存中...") : t("保存探测策略")}
         </Button>
       </div>
