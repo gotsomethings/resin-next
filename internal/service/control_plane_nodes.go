@@ -242,13 +242,16 @@ func (s *ControlPlaneService) nodeEntryMatchesFilters(
 	return true
 }
 
-// nodeIsPendingTest reports whether a node has never been probed: no egress
-// IP yet, or no probe attempt recorded.
+// nodeIsPendingTest reports whether a node has never been probed at all.
+// Both probe paths count as evidence: the platform-level probe writes
+// LastProbeAttempt, while the node-level latency probe writes
+// LastLatencyProbeAttempt. Keying on LastProbeAttempt alone left every node
+// permanently "pending" because the node-level path never wrote it.
 func nodeIsPendingTest(entry *node.NodeEntry) bool {
 	if entry == nil {
 		return true
 	}
-	return !entry.GetEgressIP().IsValid() || entry.LastProbeAttempt.Load() == 0
+	return entry.LastProbeAttempt.Load() == 0 && entry.LastLatencyProbeAttempt.Load() == 0
 }
 
 // nodeASN resolves the ASN record for a node's egress IP. The second return

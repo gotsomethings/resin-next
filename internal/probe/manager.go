@@ -908,15 +908,30 @@ func (m *ProbeManager) performEgressProbe(hash node.Hash) (netip.Addr, egressPro
 func (m *ProbeManager) performLatencyProbe(hash node.Hash, testURL string) error {
 	domain := netutil.ExtractDomain(testURL)
 	_, latency, err := m.fetcher(hash, testURL)
+	now := time.Now()
 	if err != nil {
 		m.pool.RecordResult(hash, false)
 		m.pool.RecordLatency(hash, domain, nil)
+		m.recordProbeBookkeeping(hash, false, 0, now)
 		return err
 	}
 
 	m.pool.RecordResult(hash, true)
 	m.pool.RecordLatency(hash, domain, &latency)
+	m.recordProbeBookkeeping(hash, true, latency, now)
 	return nil
+}
+
+// recordProbeBookkeeping mirrors a node-level latency probe into the entry-level
+// accounting that backs pending_test, the 24h success window, the alive streak
+// and the P95 ring. pool.RecordResult only touches FailureCount and the circuit
+// breaker, so without this the probe-only filters never see a sample.
+func (m *ProbeManager) recordProbeBookkeeping(hash node.Hash, pass bool, lat time.Duration, now time.Time) {
+	entry, ok := m.pool.GetEntry(hash)
+	if !ok || entry == nil {
+		return
+	}
+	entry.RecordProbeResult(pass, lat, now)
 }
 
 func (m *ProbeManager) currentLatencyTestURL() string {
