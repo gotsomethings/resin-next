@@ -20,11 +20,13 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 | `probe_headers` | 内置示例 | 一行一个“名: 值” |
 | `probe_body` | 内置示例 | 请求体模板，必须可自定义 |
 | `probe_pass_status` | [200] | 这些码算通过，其余全算失败 |
-| `probe_follow_redirects` | true | |
 | `probe_interval` | 30m | 勿过勤，猛探会把好 IP 探黑 |
-| `probe_scope` | 未探测过∪失败过∪黑名单中 | 绝不整池扫 |
 
 要点：探测由 resin 自己发起、出口自己指定，结果天然归属该出口 IP。
+
+**不跟随重定向（已定稿）**：目标的 3xx 即为最终结果，不做跳转；原 `probe_follow_redirects` 开关已移除，旧字段保留存储但不参与行为。
+
+**探测范围不生效（实测 2026-10-23）**：`probe_scope` 仅被存储与校验，`internal/probe/platform_probe.go` 的 `sweep()` 不读它 —— 是否探测只由 verdict 状态 + `probe_interval` / `rehab_interval` 决定。因此“拉黑 IP 是否重探”实际由 `rehab_interval` 控制（后续由“黑名单复用”开关统一开关）。
 
 ## 三、判决与黑名单（每平台每 IP 独立）
 

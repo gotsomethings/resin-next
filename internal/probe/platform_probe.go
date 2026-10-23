@@ -241,10 +241,10 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 	}
 	tr := &http.Transport{DialContext: dialer}
 	client := &http.Client{Transport: tr, Timeout: timeout}
-	if !t.Probe.FollowRedirects {
-		client.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
+	// Probing never follows redirects: whatever the target returns is the
+	// result, so a 3xx is reported as-is instead of being chased.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	start := time.Now()

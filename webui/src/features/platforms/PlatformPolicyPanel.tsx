@@ -404,16 +404,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <FieldError message={errors.probe_pass_status} />
           </div>
 
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("跟随重定向")}</label>
-            <div style={{ display: "flex", alignItems: "center", height: 36 }}>
-              <Switch
-                checked={form.probe_follow_redirects}
-                onChange={(e) => setForm({ ...form, probe_follow_redirects: e.target.checked })}
-              />
-            </div>
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认开启")}</p>
-          </div>
 
           <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测间隔")}</label>
