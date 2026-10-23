@@ -71,6 +71,12 @@ type PlatformEgressIP struct {
 	LastFailAtNs    int64  `json:"last_fail_at_ns"`
 	BlacklistedAtNs int64  `json:"blacklisted_at_ns"`
 	LastNodeHash    string `json:"last_node_hash"`
+	// LastStatusCode is the HTTP status returned by the last platform probe
+	// (0 when the probe failed before receiving a response).
+	LastStatusCode int `json:"last_status_code"`
+	// ManualBlacklist marks a blacklist set by the operator from the UI. Such a
+	// row is never auto-rehabilitated; only another manual action clears it.
+	ManualBlacklist bool `json:"manual_blacklist"`
 }
 
 // Subscription represents a node subscription source.

@@ -172,6 +172,14 @@ export async function clearAllPlatformLeases(id: string): Promise<void> {
 }
 
 
+/** Manually blacklist (on=true) or release one egress IP. */
+export async function setPlatformEgressBlacklist(id: string, ip: string, blacklisted: boolean): Promise<void> {
+  await apiRequest<void>(`${basePath}/${id}/egress/blacklist`, {
+    method: "POST",
+    body: JSON.stringify({ ip, blacklisted }),
+  });
+}
+
 export async function listPlatformEgress(id: string): Promise<EgressIPPage> {
   const data = await apiRequest<{ items?: EgressIPRow[]; total?: number }>(`${basePath}/${id}/egress`);
   const items = Array.isArray(data.items) ? data.items : [];

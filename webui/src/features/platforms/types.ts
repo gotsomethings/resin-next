@@ -118,19 +118,25 @@ export type ListPlatformLeasesInput = {
 };
 
 
-export type EgressIPState = "unknown" | "normal" | "blacklisted" | "";
+export type EgressIPState = "unknown" | "normal" | "failed" | "blacklisted" | "";
+export type EgressIPType = "residential" | "hosting" | "mobile" | "unknown" | "";
 
+/** One row of the platform IP list: config-filtered egress IP + verdict. */
 export type EgressIPRow = {
   ip: string;
+  country?: string;
+  ip_type?: EgressIPType;
   state: EgressIPState;
+  node_count: number;
   failure_count: number;
   success_streak: number;
+  last_status_code: number;
   last_result: string;
-  last_probe_at: string;
-  last_success_at: string;
-  first_seen: string;
-  last_seen: string;
-  node_count: number;
+  joined_at?: string;
+  last_probe_at?: string;
+  last_success_at?: string;
+  success_rate?: number | null;
+  manual_blacklist?: boolean;
 };
 
 export type EgressIPPage = { items: EgressIPRow[]; total: number };

@@ -102,6 +102,7 @@ const (
 func (v *VerdictStore) Record(
 	platformID, ip, nodeHash string,
 	pass bool,
+	statusCode int,
 	now time.Time,
 	cfg platform.VerdictConfig,
 ) (becameBlacklisted, becameNormal bool) {
@@ -124,6 +125,7 @@ func (v *VerdictStore) Record(
 	e.LastProbeAtNs = now.UnixNano()
 	e.LastSeenNs = now.UnixNano()
 	e.LastNodeHash = nodeHash
+	e.LastStatusCode = statusCode
 
 	if pass {
 		e.LastResult = "pass"
@@ -132,7 +134,8 @@ func (v *VerdictStore) Record(
 		e.FailureCount = 0
 			switch VerdictState(e.State) {
 		case VerdictBlacklisted:
-			if e.SuccessStreak >= cfg.RehabSuccessThreshold {
+			// A manual blacklist is only cleared by hand, never by a streak.
+			if !e.ManualBlacklist && e.SuccessStreak >= cfg.RehabSuccessThreshold {
 				e.State = string(VerdictNormal)
 				e.BlacklistedAtNs = 0
 				becameNormal = true
@@ -167,6 +170,69 @@ func (v *VerdictStore) Record(
 		onRehab(platformID, ip)
 	}
 	return becameBlacklisted, becameNormal
+}
+
+// SetManualBlacklist forces ip into (on=true) or out of (on=false) the
+// blacklist. A manual blacklist is never auto-rehabilitated; only a manual
+// release clears it. It reports whether the stored state actually changed.
+func (v *VerdictStore) SetManualBlacklist(platformID, ip string, on bool, now time.Time) bool {
+	if v == nil {
+		return false
+	}
+
+	v.mu.Lock()
+	m := v.byPlatform[platformID]
+	if m == nil {
+		m = make(map[string]*model.PlatformEgressIP)
+		v.byPlatform[platformID] = m
+	}
+	e := m[ip]
+	if e == nil {
+		e = &model.PlatformEgressIP{PlatformID: platformID, IP: ip, State: string(VerdictUnknown), FirstSeenNs: now.UnixNano()}
+		m[ip] = e
+	}
+
+	changed := false
+	if on {
+		if e.State != string(VerdictBlacklisted) || !e.ManualBlacklist {
+			e.State = string(VerdictBlacklisted)
+			e.ManualBlacklist = true
+			e.BlacklistedAtNs = now.UnixNano()
+			e.SuccessStreak = 0
+			changed = true
+		}
+	} else if e.ManualBlacklist || e.State == string(VerdictBlacklisted) {
+		e.ManualBlacklist = false
+		e.BlacklistedAtNs = 0
+		e.SuccessStreak = 0
+		e.FailureCount = 0
+		if e.LastProbeAtNs > 0 {
+			e.State = string(VerdictNormal)
+		} else {
+			e.State = string(VerdictUnknown)
+		}
+		changed = true
+	}
+
+	snapshot := *e
+	onBlacklist := v.onBlacklist
+	onRehab := v.onRehab
+	v.mu.Unlock()
+
+	if !changed {
+		return false
+	}
+	if v.repo != nil {
+		_ = v.repo.UpsertPlatformEgressIP(snapshot)
+	}
+	if on {
+		if onBlacklist != nil {
+			onBlacklist(platformID, ip)
+		}
+	} else if onRehab != nil {
+		onRehab(platformID, ip)
+	}
+	return true
 }
 
 // Snapshot returns a copy of the platform's ledger rows.

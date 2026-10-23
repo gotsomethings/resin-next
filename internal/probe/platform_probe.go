@@ -20,7 +20,7 @@ import (
 type VerdictRecorder interface {
 	IsBlacklisted(platformID string, ip netip.Addr) bool
 	EntryState(platformID, ip string) (state string, lastProbeAtNs int64, failureCount int)
-	Record(platformID, ip, nodeHash string, pass bool, now time.Time, cfg platform.VerdictConfig) (bool, bool)
+	Record(platformID, ip, nodeHash string, pass bool, statusCode int, now time.Time, cfg platform.VerdictConfig) (bool, bool)
 }
 
 // PlatformTarget is a snapshot of one platform's probe/verdict config.
@@ -182,12 +182,12 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 		go func(c probeCandidate) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			pass, latency := p.probeOne(t, c.hash)
+			pass, latency, statusCode := p.probeOne(t, c.hash)
 			now := time.Now()
 			// The probe belongs to the EGRESS IP, not to one node: every node behind
 			// that IP shares the result, so node-level filters stay meaningful.
 			p.recordIPProbeResult(c.ip, pass, latency, now)
-			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), pass, now, t.Verdict)
+			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), pass, statusCode, now, t.Verdict)
 			if (black || rehabbed) && p.cfg.OnVerdictChange != nil {
 				p.cfg.OnVerdictChange(t.ID)
 			}
@@ -196,14 +196,14 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 	wg.Wait()
 }
 
-func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.Duration) {
+func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.Duration, int) {
 	entry, ok := p.cfg.Pool.GetEntry(hash)
 	if !ok {
-		return false, 0
+		return false, 0, 0
 	}
 	outboundPtr := entry.Outbound.Load()
 	if outboundPtr == nil {
-		return false, 0
+		return false, 0, 0
 	}
 
 	timeout := 15 * time.Second
@@ -225,7 +225,7 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 	}
 	req, err := http.NewRequestWithContext(ctx, method, t.Probe.URL, body)
 	if err != nil {
-		return false, 0
+		return false, 0, 0
 	}
 	for _, line := range strings.Split(t.Probe.Headers, "\n") {
 		line = strings.TrimSpace(line)
@@ -254,7 +254,7 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 	resp, err := client.Do(req)
 	latency := time.Since(start)
 	if err != nil {
-		return false, latency
+		return false, latency, 0
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
@@ -265,10 +265,10 @@ func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.D
 	}
 	for _, code := range passStatus {
 		if resp.StatusCode == code {
-			return true, latency
+			return true, latency, resp.StatusCode
 		}
 	}
-	return false, latency
+	return false, latency, resp.StatusCode
 }
 
 // recordIPProbeResult writes one probe outcome into every node sharing the IP.

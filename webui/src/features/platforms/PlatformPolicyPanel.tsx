@@ -7,7 +7,7 @@ import { Textarea } from "../../components/ui/Textarea";
 import { Input } from "../../components/ui/Input";
 import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
-import { listPlatformEgress, updatePlatform } from "./api";
+import { listPlatformEgress, setPlatformEgressBlacklist, updatePlatform } from "./api";
 import { getGeoIPStatus } from "../geoip/api";
 import type { EgressIPRow, Platform, PlatformExtras, PlatformUpdateInput } from "./types";
 
@@ -175,14 +175,88 @@ function mapApiFieldError(
 
 function stateBadge(state: string): string {
   if (state === "blacklisted") return "badge badge-danger";
+  if (state === "failed") return "badge badge-warning";
   if (state === "normal") return "badge badge-success";
   return "badge";
 }
 
 function stateText(t: (key: string) => string, state: string): string {
   if (state === "normal") return t("正常");
-  if (state === "blacklisted") return t("已拉黑");
-  return t("未知");
+  if (state === "failed") return t("失败");
+  if (state === "blacklisted") return t("拉黑");
+  return t("未测");
+}
+
+// RFC3339Nano -> local "YYYY-MM-DD HH:mm:ss" (- when unknown).
+function formatTimeToSecond(raw: string | undefined): string {
+  if (!raw) return "-";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function formatRate(rate: number | null | undefined): string {
+  if (typeof rate !== "number" || !Number.isFinite(rate)) return "-";
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+function ipTypeText(t: (key: string) => string, type: string | undefined): string {
+  if (type === "residential") return t("住宅");
+  if (type === "hosting") return t("机房");
+  if (type === "mobile") return t("移动");
+  return t("其他");
+}
+
+const IP_FILTER_ITEM_STYLE = { display: "flex", flexDirection: "column" as const, gap: "0.25rem" };
+const IP_FILTER_LABEL_STYLE = { fontSize: "0.75rem", color: "var(--text-secondary)" };
+const IP_FILTER_CONTROL_STYLE = { minWidth: 150 };
+
+// Manual blacklist toggle: off = neutral track with the knob left, on = the
+// knob slides right over a red track.
+function BlacklistToggle({
+  on,
+  disabled,
+  onToggle,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={() => onToggle(!on)}
+      style={{
+        position: "relative",
+        width: 44,
+        height: 24,
+        padding: 0,
+        border: "none",
+        borderRadius: 12,
+        cursor: disabled ? "not-allowed" : "pointer",
+        background: on ? "var(--danger)" : "var(--border)",
+        transition: "background 0.18s ease",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: on ? 23 : 3,
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          background: "#fff",
+          transition: "left 0.18s ease",
+        }}
+      />
+    </button>
+  );
 }
 
 export function PlatformPolicyPanel({ platform }: Props) {
@@ -191,9 +265,14 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const [form, setForm] = useState<FormState>(() => toForm(platform));
   const [notice, setNotice] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [egressState, setEgressState] = useState<"all" | "unknown" | "normal" | "blacklisted">("all");
+  const [egressState, setEgressState] = useState<"all" | "unknown" | "normal" | "failed" | "blacklisted">(
+    "all",
+  );
+  const [egressType, setEgressType] = useState<"all" | "residential" | "hosting" | "mobile" | "unknown">("all");
+  const [egressKeyword, setEgressKeyword] = useState("");
+  const [egressCountry, setEgressCountry] = useState("");
   const [egressSort, setEgressSort] = useState<"failure_desc" | "failure_asc" | "probe_desc" | "probe_asc" | "ip_asc">(
-    "failure_desc",
+    "ip_asc",
   );
 
   useEffect(() => {
@@ -268,6 +347,19 @@ export function PlatformPolicyPanel({ platform }: Props) {
     },
   });
 
+  const blacklistMutation = useMutation({
+    mutationFn: (vars: { ip: string; blacklisted: boolean }) =>
+      setPlatformEgressBlacklist(platform.id, vars.ip, vars.blacklisted),
+    onSuccess: () => {
+      setNotice("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-egress", platform.id] });
+      void queryClient.invalidateQueries({ queryKey: ["platform", platform.id] });
+    },
+    onError: (error) => {
+      setNotice(formatApiErrorMessage(error, t));
+    },
+  });
+
   const num = (v: string) => {
     const n = Number.parseInt(v, 10);
     return Number.isFinite(n) ? n : 0;
@@ -331,6 +423,15 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const allEgressRows: EgressIPRow[] = egressQuery.data?.items ?? [];
   const visibleEgressRows = allEgressRows
     .filter((row) => egressState === "all" || (row.state || "unknown") === egressState)
+    .filter((row) => egressType === "all" || (row.ip_type || "unknown") === egressType)
+    .filter((row) => {
+      const kw = egressKeyword.trim().toLowerCase();
+      return !kw || row.ip.toLowerCase().includes(kw);
+    })
+    .filter((row) => {
+      const want = egressCountry.trim().toLowerCase();
+      return !want || (row.country || "").toLowerCase() === want;
+    })
     .slice()
     .sort((a, b) => {
       switch (egressSort) {
@@ -735,26 +836,60 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
       <section className="syscfg-section">
         <h4>{t("IP 列表")}</h4>
-        <p className="muted">{t("IP 统计口径：未测 / 正常 / 失败 / 拉黑")}</p>
+        <p className="muted">
+          {t("展示平台配置与高级设置共同过滤后的全部出口 IP；未测与拉黑仍在列。")}
+        </p>
 
-        <div className="policy-toolbar" style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("状态")}</label>
-            <Select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
+        <div
+          className="nodes-inline-filters"
+          style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-end", marginTop: 12 }}
+        >
+          <div style={IP_FILTER_ITEM_STYLE}>
+            <label style={IP_FILTER_LABEL_STYLE}>{t("IP")}</label>
+            <Input
+              value={egressKeyword}
+              onChange={(e) => setEgressKeyword(e.target.value)}
+              placeholder={t("模糊搜索")}
+              style={IP_FILTER_CONTROL_STYLE}
+            />
+          </div>
+          <div style={IP_FILTER_ITEM_STYLE}>
+            <label style={IP_FILTER_LABEL_STYLE}>{t("国家")}</label>
+            <Input
+              value={egressCountry}
+              onChange={(e) => setEgressCountry(e.target.value)}
+              placeholder={t("如 jp")}
+              style={IP_FILTER_CONTROL_STYLE}
+            />
+          </div>
+          <div style={IP_FILTER_ITEM_STYLE}>
+            <label style={IP_FILTER_LABEL_STYLE}>{t("类型")}</label>
+            <Select value={egressType} onChange={(e) => setEgressType(e.target.value as typeof egressType)}>
               <option value="all">{t("全部")}</option>
-              <option value="unknown">{t("未知")}</option>
-              <option value="normal">{t("正常")}</option>
-              <option value="blacklisted">{t("已拉黑")}</option>
+              <option value="residential">{t("住宅")}</option>
+              <option value="hosting">{t("机房")}</option>
+              <option value="mobile">{t("移动")}</option>
+              <option value="unknown">{t("其他")}</option>
             </Select>
           </div>
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("排序")}</label>
+          <div style={IP_FILTER_ITEM_STYLE}>
+            <label style={IP_FILTER_LABEL_STYLE}>{t("状态")}</label>
+            <Select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
+              <option value="all">{t("全部")}</option>
+              <option value="unknown">{t("未测")}</option>
+              <option value="normal">{t("正常")}</option>
+              <option value="failed">{t("失败")}</option>
+              <option value="blacklisted">{t("拉黑")}</option>
+            </Select>
+          </div>
+          <div style={IP_FILTER_ITEM_STYLE}>
+            <label style={IP_FILTER_LABEL_STYLE}>{t("排序")}</label>
             <Select value={egressSort} onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}>
+              <option value="ip_asc">{t("IP 字典序")}</option>
               <option value="failure_desc">{t("连续失败 ↓")}</option>
               <option value="failure_asc">{t("连续失败 ↑")}</option>
               <option value="probe_desc">{t("最近探测时间 ↓")}</option>
               <option value="probe_asc">{t("最近探测时间 ↑")}</option>
-              <option value="ip_asc">{t("IP 字典序")}</option>
             </Select>
           </div>
           <Button variant="secondary" size="sm" onClick={() => void egressQuery.refetch()} disabled={egressQuery.isFetching}>
@@ -763,39 +898,66 @@ export function PlatformPolicyPanel({ platform }: Props) {
           <span className="muted">{visibleEgressRows.length} / {allEgressRows.length}</span>
         </div>
 
-        {egressQuery.isLoading ? <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("加载中...")}</p> : null}
-        {egressQuery.isError ? <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{formatApiErrorMessage(egressQuery.error, t)}</p> : null}
-        {!egressQuery.isLoading && !egressQuery.isError && !allEgressRows.length ? (
-          <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("暂无台账数据")}</p>
+        {egressQuery.isLoading ? <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{t("加载中...")}</p> : null}
+        {egressQuery.isError ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{formatApiErrorMessage(egressQuery.error, t)}</p>
         ) : null}
+        {!egressQuery.isLoading && !egressQuery.isError && !allEgressRows.length ? (
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{t("暂无台账数据")}</p>
+        ) : null}
+
         {visibleEgressRows.length ? (
           <div className="table-wrap" style={{ marginTop: 12 }}>
             <table className="data-table">
               <thead>
                 <tr>
                   <th>{t("IP")}</th>
-                  <th>{t("状态")}</th>
-                  <th>{t("连续失败")}</th>
-                  <th>{t("洗白进度")}</th>
-                  <th>{t("最近结果码")}</th>
-                  <th>{t("最近探测时间")}</th>
+                  <th>{t("国家")}</th>
+                  <th>{t("类型")}</th>
                   <th>{t("总节点")}</th>
+                  <th>{t("状态")}</th>
+                  <th>{t("黑名单连续成功")}</th>
+                  <th>{t("状态码")}</th>
+                  <th>{t("时间")}</th>
+                  <th>{t("近 {{min}} 分钟通过率", { min: form.probe_rate_window_minutes })}</th>
+                  <th>{t("手动拉黑")}</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleEgressRows.map((row: EgressIPRow) => (
-                  <tr key={row.ip}>
-                    <td>{row.ip}</td>
-                    <td>
-                      <span className={stateBadge(row.state)}>{stateText(t, row.state || "unknown")}</span>
-                    </td>
-                    <td>{row.failure_count}</td>
-                    <td>{row.success_streak}/{form.rehab_success_threshold}</td>
-                    <td>{row.last_result || "-"}</td>
-                    <td>{row.last_probe_at || "-"}</td>
-                    <td>{row.node_count}</td>
-                  </tr>
-                ))}
+                {visibleEgressRows.map((row: EgressIPRow) => {
+                  const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
+                  return (
+                    <tr key={row.ip}>
+                      <td>{row.ip}</td>
+                      <td>{row.country ? row.country.toUpperCase() : "-"}</td>
+                      <td>{ipTypeText(t, row.ip_type)}</td>
+                      <td>{row.node_count}</td>
+                      <td>
+                        <span className={stateBadge(row.state)}>{stateText(t, row.state || "unknown")}</span>
+                      </td>
+                      <td>{row.state === "blacklisted" ? row.success_streak : "-"}</td>
+                      <td>{row.last_status_code > 0 ? row.last_status_code : "-"}</td>
+                      <td style={{ whiteSpace: "nowrap", lineHeight: 1.5 }}>
+                        <div>
+                          <span className="muted" style={{ fontSize: 12 }}>{t("加入")} </span>
+                          {formatTimeToSecond(row.joined_at)}
+                        </div>
+                        <div>
+                          <span className="muted" style={{ fontSize: 12 }}>{t("探测")} </span>
+                          {formatTimeToSecond(row.last_probe_at)}
+                        </div>
+                      </td>
+                      <td>{formatRate(row.success_rate)}</td>
+                      <td>
+                        <BlacklistToggle
+                          on={blacklisted}
+                          disabled={blacklistMutation.isPending}
+                          onToggle={(next) => blacklistMutation.mutate({ ip: row.ip, blacklisted: next })}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

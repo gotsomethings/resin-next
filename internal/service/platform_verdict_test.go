@@ -15,12 +15,12 @@ func TestVerdictStore_BlacklistAndRehab(t *testing.T) {
 	now := time.Now()
 
 	for i := 1; i <= 2; i++ {
-		black, _ := store.Record("p1", ip, "h1", false, now.Add(time.Duration(i)*time.Minute), cfg)
+		black, _ := store.Record("p1", ip, "h1", false, 200, now.Add(time.Duration(i)*time.Minute), cfg)
 		if black {
 			t.Fatalf("fail %d must not blacklist yet", i)
 		}
 	}
-	black, _ := store.Record("p1", ip, "h1", false, now.Add(3*time.Minute), cfg)
+	black, _ := store.Record("p1", ip, "h1", false, 200, now.Add(3*time.Minute), cfg)
 	if !black {
 		t.Fatal("third consecutive failure must blacklist")
 	}
@@ -33,7 +33,7 @@ func TestVerdictStore_BlacklistAndRehab(t *testing.T) {
 
 	// M-1 passes are not enough.
 	for i := 1; i <= 2; i++ {
-		_, rehab := store.Record("p1", ip, "h1", true, now.Add(time.Duration(10+i)*time.Minute), cfg)
+		_, rehab := store.Record("p1", ip, "h1", true, 200, now.Add(time.Duration(10+i)*time.Minute), cfg)
 		if rehab {
 			t.Fatalf("pass %d must not rehabilitate yet", i)
 		}
@@ -43,7 +43,7 @@ func TestVerdictStore_BlacklistAndRehab(t *testing.T) {
 	}
 
 	// M-th pass rehabilitates.
-	_, rehab := store.Record("p1", ip, "h1", true, now.Add(13*time.Minute), cfg)
+	_, rehab := store.Record("p1", ip, "h1", true, 200, now.Add(13*time.Minute), cfg)
 	if !rehab {
 		t.Fatalf("%d consecutive passes must rehabilitate", cfg.RehabSuccessThreshold)
 	}
@@ -61,19 +61,19 @@ func TestVerdictStore_OneFailureResetsStreak(t *testing.T) {
 	ip := "5.6.7.8"
 	now := time.Now()
 
-	store.Record("p1", ip, "h1", false, now, cfg)
-	store.Record("p1", ip, "h1", false, now.Add(time.Minute), cfg)
+	store.Record("p1", ip, "h1", false, 200, now, cfg)
+	store.Record("p1", ip, "h1", false, 200, now.Add(time.Minute), cfg)
 	if !store.IsBlacklisted("p1", netip.MustParseAddr(ip)) {
 		t.Fatal("threshold 2 must blacklist on the second failure")
 	}
 
-	store.Record("p1", ip, "h1", true, now.Add(2*time.Minute), cfg)
-	store.Record("p1", ip, "h1", false, now.Add(3*time.Minute), cfg)
+	store.Record("p1", ip, "h1", true, 200, now.Add(2*time.Minute), cfg)
+	store.Record("p1", ip, "h1", false, 200, now.Add(3*time.Minute), cfg)
 	if state, _, fails := store.EntryState("p1", ip); state != string(VerdictBlacklisted) || fails != 1 {
 		t.Fatalf("state=%s fails=%d, want blacklisted/1", state, fails)
 	}
 	// The failure reset the pass streak, so one pass is still not enough.
-	if _, rehab := store.Record("p1", ip, "h1", true, now.Add(4*time.Minute), cfg); rehab {
+	if _, rehab := store.Record("p1", ip, "h1", true, 200, now.Add(4*time.Minute), cfg); rehab {
 		t.Fatal("one pass after a failure must not rehabilitate")
 	}
 }
@@ -93,7 +93,7 @@ func TestVerdictStore_DisabledVerdictNeverBlacklists(t *testing.T) {
 	store := NewVerdictStore(nil)
 	cfg := platform.VerdictConfig{Enabled: false, Threshold: 1}
 	for i := 0; i < 5; i++ {
-		if black, _ := store.Record("p1", "8.8.8.8", "h1", false, time.Now(), cfg); black {
+		if black, _ := store.Record("p1", "8.8.8.8", "h1", false, 200, time.Now(), cfg); black {
 			t.Fatal("verdict disabled must never blacklist")
 		}
 	}

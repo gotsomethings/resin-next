@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 	"time"
 
@@ -983,18 +984,23 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 	return result, nil
 }
 
-// PlatformEgressIPResponse is one ledger row for a platform.
+// PlatformEgressIPResponse is one row of the platform IP list: the egress-IP
+// ledger joined with the nodes currently passing the platform configuration.
 type PlatformEgressIPResponse struct {
-	IP            string `json:"ip"`
-	State         string `json:"state"`
-	FailureCount  int    `json:"failure_count"`
-	SuccessStreak int    `json:"success_streak"`
-	LastResult    string `json:"last_result"`
-	LastProbeAt   string `json:"last_probe_at,omitempty"`
-	LastSuccessAt string `json:"last_success_at,omitempty"`
-	FirstSeen     string `json:"first_seen,omitempty"`
-	LastSeen      string `json:"last_seen,omitempty"`
-	NodeCount     int    `json:"node_count"`
+	IP              string   `json:"ip"`
+	Country         string   `json:"country,omitempty"`
+	IPType          string   `json:"ip_type,omitempty"`
+	State           string   `json:"state"`
+	NodeCount       int      `json:"node_count"`
+	FailureCount    int      `json:"failure_count"`
+	SuccessStreak   int      `json:"success_streak"`
+	LastStatusCode  int      `json:"last_status_code"`
+	LastResult      string   `json:"last_result"`
+	JoinedAt        string   `json:"joined_at,omitempty"`
+	LastProbeAt     string   `json:"last_probe_at,omitempty"`
+	LastSuccessAt   string   `json:"last_success_at,omitempty"`
+	SuccessRate     *float64 `json:"success_rate,omitempty"`
+	ManualBlacklist bool     `json:"manual_blacklist"`
 }
 
 func formatUnixNs(ns int64) string {
@@ -1004,65 +1010,147 @@ func formatUnixNs(ns int64) string {
 	return time.Unix(0, ns).UTC().Format(time.RFC3339Nano)
 }
 
-// ListPlatformEgress returns the per-platform egress-IP ledger joined with the
-// current node count per IP. P1: ledger is empty until P2 starts writing it.
+// ipAgg accumulates the per-egress-IP facts across the nodes behind that IP.
+type ipAgg struct {
+	count   int
+	country string
+	ipType  string
+	joined  int64
+	succ    int
+	total   int
+}
+
+// ListPlatformEgress returns the platform IP list: every egress IP whose nodes
+// pass the platform's static configuration filters (subscription, tags, region,
+// node age, egress version/country, ASN, IP type, manual IP allow/deny), joined
+// with the verdict ledger.
+//
+// Runtime dimensions (health, latency, alive streak, probe rate, last probe age)
+// and the blacklist deliberately do not filter the list: untested and
+// blacklisted IPs must stay visible with their state.
 func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformEgressIPResponse, error) {
 	if _, err := s.getPlatformModel(platformID); err != nil {
 		return nil, err
 	}
 
-	nodeCounts := make(map[string]int)
+	now := time.Now()
+	var window time.Duration
+	aggs := make(map[string]*ipAgg)
+
 	if s.Pool != nil {
-		s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
-			ip := entry.GetEgressIP()
-			if ip.IsValid() {
-				nodeCounts[ip.String()]++
-			}
-			return true
-		})
+		if rt, ok := s.Pool.GetPlatform(platformID); ok && rt != nil {
+			window = rt.Policy.MinProbeSuccessRateWindow
+			subLookup := s.Pool.MakeSubLookup()
+			geo := s.geoLookup()
+			asn := s.asnLookupFunc()
+			s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+				ip := entry.GetEgressIP()
+				if !ip.IsValid() || !rt.MatchesConfigFilters(entry, subLookup, geo) {
+					return true
+				}
+				key := ip.Unmap().String()
+				a := aggs[key]
+				if a == nil {
+					a = &ipAgg{}
+					if geo != nil {
+						a.country = geo(ip)
+					}
+					if asn != nil {
+						if info, ok := asn(ip); ok {
+							a.ipType = platform.ClassifyIPType(info)
+						}
+					}
+					aggs[key] = a
+				}
+				a.count++
+				if created := entry.CreatedAt.UnixNano(); created > 0 && (a.joined == 0 || created < a.joined) {
+					a.joined = created
+				}
+				succ, total := entry.ProbeWindowStats(now, window)
+				a.succ += succ
+				a.total += total
+				return true
+			})
+		}
 	}
 
-	var rows []model.PlatformEgressIP
+	ledger := make(map[string]model.PlatformEgressIP)
 	if s.Verdicts != nil {
-		rows = s.Verdicts.Snapshot(platformID)
-	} else {
-		var err error
-		rows, err = s.Engine.ListPlatformEgressIPs(platformID)
+		for _, r := range s.Verdicts.Snapshot(platformID) {
+			ledger[r.IP] = r
+		}
+	} else if s.Engine != nil {
+		rows, err := s.Engine.ListPlatformEgressIPs(platformID)
 		if err != nil {
 			return nil, internal("list platform egress ips", err)
 		}
-	}
-	out := make([]PlatformEgressIPResponse, 0, len(rows)+len(nodeCounts))
-	seen := make(map[string]struct{}, len(rows))
-	for _, r := range rows {
-		seen[r.IP] = struct{}{}
-		out = append(out, PlatformEgressIPResponse{
-			IP:            r.IP,
-			State:         r.State,
-			FailureCount:  r.FailureCount,
-			SuccessStreak: r.SuccessStreak,
-			LastResult:    r.LastResult,
-			LastProbeAt:   formatUnixNs(r.LastProbeAtNs),
-			LastSuccessAt: formatUnixNs(r.LastSuccessAtNs),
-			FirstSeen:     formatUnixNs(r.FirstSeenNs),
-			LastSeen:      formatUnixNs(r.LastSeenNs),
-			NodeCount:     nodeCounts[r.IP],
-		})
-	}
-	// Every egress IP currently in the pool is listed as well, so this view is a
-	// complete IP list rather than only the IPs the platform probe has judged.
-	// Unjudged IPs carry state "unknown".
-	for ip, count := range nodeCounts {
-		if _, ok := seen[ip]; ok {
-			continue
+		for _, r := range rows {
+			ledger[r.IP] = r
 		}
-		out = append(out, PlatformEgressIPResponse{
-			IP:        ip,
-			State:     "unknown",
-			NodeCount: count,
-		})
 	}
+
+	out := make([]PlatformEgressIPResponse, 0, len(aggs))
+	for ip, a := range aggs {
+		row := PlatformEgressIPResponse{
+			IP:        ip,
+			Country:   a.country,
+			IPType:    a.ipType,
+			NodeCount: a.count,
+			State:     string(VerdictUnknown),
+		}
+		if r, ok := ledger[ip]; ok {
+			row.FailureCount = r.FailureCount
+			row.SuccessStreak = r.SuccessStreak
+			row.LastStatusCode = r.LastStatusCode
+			row.LastResult = r.LastResult
+			row.LastProbeAt = formatUnixNs(r.LastProbeAtNs)
+			row.LastSuccessAt = formatUnixNs(r.LastSuccessAtNs)
+			row.ManualBlacklist = r.ManualBlacklist
+			row.JoinedAt = formatUnixNs(r.FirstSeenNs)
+			switch {
+			case r.State == string(VerdictBlacklisted):
+				row.State = string(VerdictBlacklisted)
+			case r.LastProbeAtNs > 0 && r.LastResult == "pass":
+				row.State = string(VerdictNormal)
+			case r.LastProbeAtNs > 0:
+				row.State = "failed"
+			}
+		}
+		if row.JoinedAt == "" && a.joined > 0 {
+			row.JoinedAt = formatUnixNs(a.joined)
+		}
+		if a.total > 0 {
+			rate := float64(a.succ) / float64(a.total)
+			row.SuccessRate = &rate
+		}
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].IP < out[j].IP })
 	return out, nil
+}
+
+// SetPlatformEgressBlacklist manually blacklists (on=true) or releases an
+// egress IP for one platform and reports whether the state changed. A manual
+// blacklist is never cleared by the automatic rehab streak.
+func (s *ControlPlaneService) SetPlatformEgressBlacklist(platformID, ipStr string, blacklisted bool) (bool, error) {
+	if _, err := s.getPlatformModel(platformID); err != nil {
+		return false, err
+	}
+	ip, err := netip.ParseAddr(strings.TrimSpace(ipStr))
+	if err != nil {
+		return false, invalidArg("ip: invalid format")
+	}
+	if s.Verdicts == nil {
+		return false, internal("verdict store unavailable", nil)
+	}
+	ip = ip.Unmap()
+	if !s.Verdicts.SetManualBlacklist(platformID, ip.String(), blacklisted, time.Now()) {
+		return false, nil
+	}
+	if blacklisted {
+		s.EvictLeasesForIP(platformID, ip.String())
+	}
+	return true, nil
 }
 
 // blacklistLookup builds the per-platform blacklist predicate.

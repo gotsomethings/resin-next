@@ -423,7 +423,8 @@ func (r *StateRepo) ListPlatforms() ([]model.Platform, error) {
 func (r *StateRepo) ListPlatformEgressIPs(platformID string) ([]model.PlatformEgressIP, error) {
 	rows, err := r.db.Query(`
 		SELECT platform_id, ip, state, failure_count, success_streak, last_result,
-		       last_probe_at_ns, last_success_at_ns, first_seen_ns, last_seen_ns
+		       last_probe_at_ns, last_success_at_ns, first_seen_ns, last_seen_ns,
+		       last_status_code, manual_blacklist
 		FROM platform_egress_ips WHERE platform_id = ? ORDER BY last_seen_ns DESC`, platformID)
 	if err != nil {
 		return nil, err
@@ -434,7 +435,8 @@ func (r *StateRepo) ListPlatformEgressIPs(platformID string) ([]model.PlatformEg
 	for rows.Next() {
 		var e model.PlatformEgressIP
 		if err := rows.Scan(&e.PlatformID, &e.IP, &e.State, &e.FailureCount, &e.SuccessStreak,
-			&e.LastResult, &e.LastProbeAtNs, &e.LastSuccessAtNs, &e.FirstSeenNs, &e.LastSeenNs); err != nil {
+			&e.LastResult, &e.LastProbeAtNs, &e.LastSuccessAtNs, &e.FirstSeenNs, &e.LastSeenNs,
+			&e.LastStatusCode, &e.ManualBlacklist); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -449,8 +451,9 @@ func (r *StateRepo) UpsertPlatformEgressIP(e model.PlatformEgressIP) error {
 	_, err := r.db.Exec(`
 		INSERT INTO platform_egress_ips (platform_id, ip, state, failure_count, success_streak,
 		                                 last_result, last_probe_at_ns, last_success_at_ns,
-		                                 first_seen_ns, last_seen_ns)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                                 first_seen_ns, last_seen_ns, last_status_code,
+		                                 manual_blacklist)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(platform_id, ip) DO UPDATE SET
 			state             = excluded.state,
 			failure_count     = excluded.failure_count,
@@ -458,9 +461,12 @@ func (r *StateRepo) UpsertPlatformEgressIP(e model.PlatformEgressIP) error {
 			last_result       = excluded.last_result,
 			last_probe_at_ns  = excluded.last_probe_at_ns,
 			last_success_at_ns = excluded.last_success_at_ns,
-			last_seen_ns      = excluded.last_seen_ns
+			last_seen_ns      = excluded.last_seen_ns,
+			last_status_code  = excluded.last_status_code,
+			manual_blacklist  = excluded.manual_blacklist
 	`, e.PlatformID, e.IP, e.State, e.FailureCount, e.SuccessStreak,
-		e.LastResult, e.LastProbeAtNs, e.LastSuccessAtNs, e.FirstSeenNs, e.LastSeenNs)
+		e.LastResult, e.LastProbeAtNs, e.LastSuccessAtNs, e.FirstSeenNs, e.LastSeenNs,
+		e.LastStatusCode, e.ManualBlacklist)
 	return err
 }
 

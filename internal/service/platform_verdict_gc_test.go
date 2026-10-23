@@ -14,11 +14,11 @@ func TestVerdictStore_GC_RespectsRetentionAndLiveIPs(t *testing.T) {
 	cutoff := now.Add(-retention)
 
 	// Live IP seen from the start (stale by LastSeen, still on a node).
-	store.Record("p1", "10.0.0.1", "h1", true, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
+	store.Record("p1", "10.0.0.1", "h1", true, 200, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
 	// Gone IP, older than retention.
-	store.Record("p1", "10.0.0.2", "h2", true, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
+	store.Record("p1", "10.0.0.2", "h2", true, 200, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
 	// Gone IP, inside the retention window.
-	store.Record("p1", "10.0.0.3", "h3", true, now.Add(-10*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
+	store.Record("p1", "10.0.0.3", "h3", true, 200, now.Add(-10*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
 
 	removed, err := store.GC(cutoff, func(_, ip string) bool { return ip == "10.0.0.1" })
 	if err != nil {
@@ -48,7 +48,7 @@ func TestVerdictStore_GC_ReappearanceStartsUnknown(t *testing.T) {
 	store := NewVerdictStore(nil)
 	now := time.Now()
 
-	store.Record("p1", "10.0.0.9", "h1", false, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
+	store.Record("p1", "10.0.0.9", "h1", false, 200, now.Add(-100*time.Hour), platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
 	if _, err := store.GC(now.Add(-72*time.Hour), func(_, _ string) bool { return false }); err != nil {
 		t.Fatalf("GC: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestVerdictStore_GC_ReappearanceStartsUnknown(t *testing.T) {
 	}
 
 	// Coming back creates a fresh unknown row.
-	store.Record("p1", "10.0.0.9", "h1", true, now, platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
+	store.Record("p1", "10.0.0.9", "h1", true, 200, now, platform.VerdictConfig{Enabled: true, Threshold: 3, RehabSuccessThreshold: 3})
 	state, _, _ := store.EntryState("p1", "10.0.0.9")
 	if state != "normal" {
 		t.Fatalf("reappeared IP state = %q, want normal", state)

@@ -45,6 +45,8 @@ Resin 是多节点代理池，客户端（opencode2api 等）经它轮换出口 
 - 平台隔离：同 IP 在 A 平台黑、B 平台照常。
 - 新 IP（aimili 换绑）= 全新状态，自动可用不背旧账。
 - 台账 GC：IP 超过 `verdict_gc_retention`（默认 **72h**，可配）未在任何节点出现则删行；只删消失的 IP，活着的行不动，重出现按 unknown 重新入账。由 governor 循环每 6h 触发。
+- **IP 列表口径**：展示平台原配置 + 高级设置（静态维度）共同过滤后的全部出口 IP；健康/延迟/连击/通过率/最近探测等运行态以及黑名单不参与过滤，所以未测与拉黑仍在列。每 IP 的「近 N 分钟通过率」是该 IP 下全部节点的样本合并值，N 取 `probe_rate_window`。
+- 手动拉黑（UI 开关）：置 `manual_blacklist`，不参与洗白；关闭开关即解除并清除计数。拉黑瞬间同样踢租约。
 
 黑名单严格生效：**不做任何兜底放行**。当平台可路由 IP 全部被拉黑时，请求直接失败（沿用现有 empty state 的 502），不临时放行“可能也不行”的 IP。
 
@@ -110,7 +112,8 @@ ASN 库与国家库均使用 GitHub Release 资产自带的 `digest`（`sha256:<
 
 ## 七、接口
 
-- `GET /api/v1/platforms/{id}/egress` — IP 台账：状态/失败数/最近结果/节点数
+- `GET /api/v1/platforms/{id}/egress` — IP 列表：IP/国家/类型/总节点/状态（未测·正常·失败·拉黑）/黑名单连续成功/状态码/加入时间+最近探测时间/近 N 分钟通过率/手动拉黑
+- `POST /api/v1/platforms/{id}/egress/blacklist` — 手动拉黑/解除（body `{"ip","blacklisted"}`）；手动拉黑不受洗白连击自动解除，需手动关闭
 - `PATCH /api/v1/platforms/{id}` — 全部新参数
 - `POST /api/v1/platforms/preview-filter` — 试算命中，不动配置
 - `GET/PATCH /api/v1/system/config` — 并发设定/模式/生效值
@@ -123,7 +126,7 @@ ASN 库与国家库均使用 GitHub Release 资产自带的 `digest`（`sha256:<
 | `internal/platform/filters.go` | 11 维校验/匹配 |
 | `internal/platform/model_codec.go` | 校验/编解码 |
 | `internal/model/models.go` | 平台配置 + IP 判决结构 |
-| `internal/state/migrations/000010_*.sql` `000011_*.sql` | 迁移 |
+| `internal/state/migrations/000010_*.sql` … `000016_*.sql` | 迁移（策略面 / 探测面 / 洗白开关 / 通过率窗口 / 台账状态码与手动拉黑） |
 | `internal/state/repo_state.go` | 读写 |
 | `internal/service/control_plane_platform.go` | 透传 + patch 白名单 |
 | `internal/service/platform_verdict.go` | 状态机 |

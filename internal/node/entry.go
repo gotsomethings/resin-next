@@ -363,6 +363,15 @@ func (e *NodeEntry) ProbeSuccessRateWindow(now time.Time, window time.Duration) 
 	return float64(succ) / float64(total), true
 }
 
+// ProbeWindowStats returns the raw (successes, total) probe samples recorded
+// inside window, so callers can aggregate several nodes sharing one egress IP.
+func (e *NodeEntry) ProbeWindowStats(now time.Time, window time.Duration) (int, int) {
+	if e == nil || e.ProbeWindow == nil {
+		return 0, 0
+	}
+	return e.ProbeWindow.StatsWindow(now, window)
+}
+
 // ProbeSuccessRate returns the 24h success ratio. ok=false means "no samples".
 func (e *NodeEntry) ProbeSuccessRate(now time.Time) (float64, bool) {
 	if e == nil || e.ProbeWindow == nil {

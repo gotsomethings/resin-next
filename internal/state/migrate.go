@@ -34,7 +34,8 @@ const (
 	stateVersionPlatformFailover                 = 13
 	stateVersionPlatformRehabEnabled             = 14
 	stateVersionPlatformProbeRateWindow          = 15
-	stateLatestVersion                           = stateVersionPlatformProbeRateWindow
+	stateVersionPlatformEgressStatus             = 16
+	stateLatestVersion                           = stateVersionPlatformEgressStatus
 	stateLegacyBaselineVersion                   = stateVersionAddFixedAccountHeader
 
 	stateBaseSchemaMigration = stateMigrationsPath + "/000001_state_base.up.sql"

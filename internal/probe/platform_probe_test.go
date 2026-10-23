@@ -88,7 +88,7 @@ func (f *fakeVerdict) EntryState(platformID, ip string) (string, int64, int) {
 	return f.states[platformID+"|"+ip], 0, 0
 }
 
-func (f *fakeVerdict) Record(platformID, ip, _ string, pass bool, _ time.Time, _ platform.VerdictConfig) (bool, bool) {
+func (f *fakeVerdict) Record(platformID, ip, _ string, pass bool, _ int, _ time.Time, _ platform.VerdictConfig) (bool, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -151,7 +151,7 @@ func TestPlatformProbe_200RecordsPass(t *testing.T) {
 	fv := newFakeVerdict()
 	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return 2 * time.Second }})
 
-	pass, _ := pp.probeOne(newTarget(), h)
+	pass, _, _ := pp.probeOne(newTarget(), h)
 	if !pass {
 		t.Fatal("200 must be recorded as pass")
 	}
@@ -170,7 +170,7 @@ func TestPlatformProbe_DialErrorRecordsFailure(t *testing.T) {
 	fv := newFakeVerdict()
 	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return time.Second }})
 
-	if pass, _ := pp.probeOne(newTarget(), h); pass {
+	if pass, _, _ := pp.probeOne(newTarget(), h); pass {
 		t.Fatal("dial error must not be a pass")
 	}
 	pp.sweep(newTarget())
@@ -184,7 +184,7 @@ func TestPlatformProbe_TimeoutRecordsFailure(t *testing.T) {
 	fv := newFakeVerdict()
 	pp := NewPlatformProbe(PlatformProbeConfig{Pool: pool, Verdict: fv, Timeout: func() time.Duration { return 120 * time.Millisecond }})
 
-	if pass, _ := pp.probeOne(newTarget(), h); pass {
+	if pass, _, _ := pp.probeOne(newTarget(), h); pass {
 		t.Fatal("timeout must not be a pass")
 	}
 	pp.sweep(newTarget())

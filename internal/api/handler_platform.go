@@ -223,6 +223,38 @@ func HandlePreviewFilter(cp *service.ControlPlaneService) http.HandlerFunc {
 	}
 }
 
+// SetPlatformEgressBlacklistRequest is the body of the manual blacklist toggle.
+type SetPlatformEgressBlacklistRequest struct {
+	IP          string `json:"ip"`
+	Blacklisted bool   `json:"blacklisted"`
+}
+
+// HandleSetPlatformEgressBlacklist returns a handler for
+// POST /api/v1/platforms/{id}/egress/blacklist.
+func HandleSetPlatformEgressBlacklist(cp *service.ControlPlaneService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := requireUUIDPathParam(w, r, "id", "platform_id")
+		if !ok {
+			return
+		}
+		var req SetPlatformEgressBlacklistRequest
+		if err := DecodeBody(r, &req); err != nil {
+			writeDecodeBodyError(w, err)
+			return
+		}
+		if req.IP == "" {
+			writeInvalidArgument(w, "ip: must not be empty")
+			return
+		}
+		changed, err := cp.SetPlatformEgressBlacklist(id, req.IP, req.Blacklisted)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"changed": changed})
+	}
+}
+
 // HandleListPlatformEgress returns a handler for GET /api/v1/platforms/{id}/egress.
 func HandleListPlatformEgress(cp *service.ControlPlaneService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

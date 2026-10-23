@@ -270,14 +270,97 @@ func (p *Platform) NotifyDirty(
 	}
 }
 
+// MatchesConfigFilters reports whether the node passes the platform's static
+// configuration filters: subscription enablement, tag rules, a known egress IP,
+// region, node age, egress IP version, egress country, ASN, IP type and the
+// manual egress-IP allow/deny list.
+//
+// Runtime dimensions (health, latency, alive streak, probe success rate, last
+// probe age) and the verdict blacklist are deliberately NOT part of this
+// predicate: the IP list still has to show untested and blacklisted IPs.
+func (p *Platform) MatchesConfigFilters(
+	entry *node.NodeEntry,
+	subLookup node.SubLookupFunc,
+	geoLookup GeoLookupFunc,
+) bool {
+	// Disabled nodes are never routable.
+	if entry.IsDisabledBySubscriptions(subLookup) {
+		return false
+	}
+
+	// Tag regex match.
+	if !entry.MatchTagFilter(p.RegexFilters, subLookup) {
+		return false
+	}
+
+	// Egress IP must be known.
+	egressIP := entry.GetEgressIP()
+	if !egressIP.IsValid() {
+		return false
+	}
+
+	// Region filter (when configured).
+	if len(p.RegionFilters) > 0 {
+		region := entry.GetRegion(geoLookup)
+		if !MatchRegionFilter(region, p.RegionFilters) {
+			return false
+		}
+	}
+
+	pol := p.Policy
+	now := time.Now()
+
+	// min_node_age.
+	if pol.MinNodeAge > 0 {
+		if now.Sub(entry.CreatedAt) < pol.MinNodeAge {
+			return false
+		}
+	}
+
+	// egress_ip_version.
+	if !MatchEgressIPVersion(egressIP, pol.EgressIPVersion) {
+		return false
+	}
+
+	// egress_country_filters (real egress country, not the tag country).
+	if len(pol.EgressCountryFilters) > 0 {
+		country := ""
+		if geoLookup != nil {
+			country = geoLookup(egressIP)
+		}
+		if !MatchRegionFilter(country, pol.EgressCountryFilters) {
+			return false
+		}
+	}
+
+	// ASN and IP type. Without an ASN database these dimensions cannot be
+	// evaluated; treating every node as a mismatch would empty the platform, so
+	// they simply do not apply.
+	if p.ASNLookup != nil && (len(pol.ASNFilters) > 0 || len(pol.IPTypeFilters) > 0) {
+		info, ok := p.ASNLookup(egressIP)
+		if !MatchASNFilter(info, ok, pol.ASNFilters) {
+			return false
+		}
+		if !MatchIPTypeFilter(info, ok, pol.IPTypeFilters) {
+			return false
+		}
+	}
+
+	// Manual egress IP allow/deny.
+	if !MatchEgressIPFilter(egressIP, pol.EgressIPFilters) {
+		return false
+	}
+
+	return true
+}
+
 // evaluateNode checks all filter conditions for platform routability.
 func (p *Platform) evaluateNode(
 	entry *node.NodeEntry,
 	subLookup node.SubLookupFunc,
 	geoLookup GeoLookupFunc,
 ) bool {
-	// 0. Disabled nodes are never routable.
-	if entry.IsDisabledBySubscriptions(subLookup) {
+	if !p.MatchesConfigFilters(entry, subLookup, geoLookup) {
 		return false
 	}
 
@@ -286,31 +369,13 @@ func (p *Platform) evaluateNode(
 		return false
 	}
 
-	// 2. Tag regex match.
-	if !entry.MatchTagFilter(p.RegexFilters, subLookup) {
-		return false
-	}
-
-	// 3. Egress IP must be known.
+	// 2. Per-platform blacklist (verdict state machine).
 	egressIP := entry.GetEgressIP()
-	if !egressIP.IsValid() {
-		return false
-	}
-
-	// 3b. Per-platform blacklist (verdict state machine).
 	if p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
 		return false
 	}
 
-	// 4. Region filter (when configured).
-	if len(p.RegionFilters) > 0 {
-		region := entry.GetRegion(geoLookup)
-		if !MatchRegionFilter(region, p.RegionFilters) {
-			return false
-		}
-	}
-
-	// 5. Has at least one latency record.
+	// 3. Has at least one latency record.
 	if !entry.HasLatency() {
 		return false
 	}

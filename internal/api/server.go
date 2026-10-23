@@ -99,6 +99,7 @@ func NewServerWithAddress(
 		authed.Handle("DELETE /api/v1/platforms/{id}/leases/{account}", HandleDeleteLease(cp))
 		authed.Handle("GET /api/v1/platforms/{id}/ip-load", HandleIPLoad(cp))
 	authed.Handle("GET /api/v1/platforms/{id}/egress", HandleListPlatformEgress(cp))
+	authed.Handle("POST /api/v1/platforms/{id}/egress/blacklist", HandleSetPlatformEgressBlacklist(cp))
 
 		// Subscriptions.
 		authed.Handle("GET /api/v1/subscriptions", HandleListSubscriptions(cp))
