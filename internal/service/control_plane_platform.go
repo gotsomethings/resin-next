@@ -2,9 +2,9 @@ package service
 
 import (
 	"encoding/json"
-	"net/netip"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -60,6 +60,7 @@ type PlatformResponse struct {
 	ProbeInterval         string `json:"probe_interval"`
 	ProbeScope            string `json:"probe_scope"`
 	VerdictEnabled        bool   `json:"verdict_enabled"`
+	RehabEnabled          bool   `json:"rehab_enabled"`
 	BlacklistThreshold    int    `json:"blacklist_threshold"`
 	RehabInterval         string `json:"rehab_interval"`
 	RehabSuccessThreshold int    `json:"rehab_success_threshold"`
@@ -111,6 +112,7 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		ProbeInterval:         time.Duration(p.ProbeIntervalNs).String(),
 		ProbeScope:            p.ProbeScope,
 		VerdictEnabled:        p.VerdictEnabled,
+		RehabEnabled:          p.RehabEnabled,
 		BlacklistThreshold:    p.BlacklistThreshold,
 		RehabInterval:         time.Duration(p.RehabIntervalNs).String(),
 		RehabSuccessThreshold: p.RehabSuccessThreshold,
@@ -464,6 +466,7 @@ type CreatePlatformRequest struct {
 	ProbeInterval         *string `json:"probe_interval"`
 	ProbeScope            *string `json:"probe_scope"`
 	VerdictEnabled        *bool   `json:"verdict_enabled"`
+	RehabEnabled          *bool   `json:"rehab_enabled"`
 	BlacklistThreshold    *int    `json:"blacklist_threshold"`
 	RehabInterval         *string `json:"rehab_interval"`
 	RehabSuccessThreshold *int    `json:"rehab_success_threshold"`
@@ -793,23 +796,23 @@ func (f PlatformSpecFilter) policy() platform.Policy {
 
 // NodeSummary is the API response for a node.
 type NodeSummary struct {
-	NodeHash                         string    `json:"node_hash"`
-	CreatedAt                        string    `json:"created_at"`
-	Enabled                          bool      `json:"enabled"`
-	DisplayTag                       string    `json:"display_tag,omitempty"`
-	HasOutbound                      bool      `json:"has_outbound"`
-	LastError                        string    `json:"last_error,omitempty"`
-	CircuitOpenSince                 *string   `json:"circuit_open_since"`
-	FailureCount                     int       `json:"failure_count"`
-	EgressIP                         string    `json:"egress_ip,omitempty"`
-	Region                           string    `json:"region,omitempty"`
-	LastEgressUpdate                 string    `json:"last_egress_update,omitempty"`
-	LastLatencyProbeAttempt          string    `json:"last_latency_probe_attempt,omitempty"`
-	LastAuthorityLatencyProbeAttempt string    `json:"last_authority_latency_probe_attempt,omitempty"`
-	ReferenceLatencyMs               *float64  `json:"reference_latency_ms,omitempty"`
-	LastEgressUpdateAttempt          string    `json:"last_egress_update_attempt,omitempty"`
-	ASNNumber                        uint32    `json:"asn_number"`
-	ASNOrg                           string    `json:"asn_org,omitempty"`
+	NodeHash                         string   `json:"node_hash"`
+	CreatedAt                        string   `json:"created_at"`
+	Enabled                          bool     `json:"enabled"`
+	DisplayTag                       string   `json:"display_tag,omitempty"`
+	HasOutbound                      bool     `json:"has_outbound"`
+	LastError                        string   `json:"last_error,omitempty"`
+	CircuitOpenSince                 *string  `json:"circuit_open_since"`
+	FailureCount                     int      `json:"failure_count"`
+	EgressIP                         string   `json:"egress_ip,omitempty"`
+	Region                           string   `json:"region,omitempty"`
+	LastEgressUpdate                 string   `json:"last_egress_update,omitempty"`
+	LastLatencyProbeAttempt          string   `json:"last_latency_probe_attempt,omitempty"`
+	LastAuthorityLatencyProbeAttempt string   `json:"last_authority_latency_probe_attempt,omitempty"`
+	ReferenceLatencyMs               *float64 `json:"reference_latency_ms,omitempty"`
+	LastEgressUpdateAttempt          string   `json:"last_egress_update_attempt,omitempty"`
+	ASNNumber                        uint32   `json:"asn_number"`
+	ASNOrg                           string   `json:"asn_org,omitempty"`
 	// IPType is the coarse class derived from the ASN org (residential/hosting).
 	IPType string `json:"ip_type,omitempty"`
 	// PendingTest is true while the node has never been probed: no egress IP
@@ -978,16 +981,16 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 
 // PlatformEgressIPResponse is one ledger row for a platform.
 type PlatformEgressIPResponse struct {
-	IP              string `json:"ip"`
-	State           string `json:"state"`
-	FailureCount    int    `json:"failure_count"`
-	SuccessStreak   int    `json:"success_streak"`
-	LastResult      string `json:"last_result"`
-	LastProbeAt     string `json:"last_probe_at,omitempty"`
-	LastSuccessAt   string `json:"last_success_at,omitempty"`
-	FirstSeen       string `json:"first_seen,omitempty"`
-	LastSeen        string `json:"last_seen,omitempty"`
-	NodeCount       int    `json:"node_count"`
+	IP            string `json:"ip"`
+	State         string `json:"state"`
+	FailureCount  int    `json:"failure_count"`
+	SuccessStreak int    `json:"success_streak"`
+	LastResult    string `json:"last_result"`
+	LastProbeAt   string `json:"last_probe_at,omitempty"`
+	LastSuccessAt string `json:"last_success_at,omitempty"`
+	FirstSeen     string `json:"first_seen,omitempty"`
+	LastSeen      string `json:"last_seen,omitempty"`
+	NodeCount     int    `json:"node_count"`
 }
 
 func formatUnixNs(ns int64) string {

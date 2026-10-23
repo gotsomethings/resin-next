@@ -42,6 +42,7 @@ type Platform struct {
 	ProbeIntervalNs       int64  `json:"probe_interval_ns"`
 	ProbeScope            string `json:"probe_scope"`
 	VerdictEnabled        bool   `json:"verdict_enabled"`
+	RehabEnabled          bool   `json:"rehab_enabled"`
 	BlacklistThreshold    int    `json:"blacklist_threshold"`
 	RehabIntervalNs       int64  `json:"rehab_interval_ns"`
 	RehabSuccessThreshold int    `json:"rehab_success_threshold"`

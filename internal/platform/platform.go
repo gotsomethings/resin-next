@@ -28,18 +28,18 @@ type GetEntryFunc func(node.Hash) (*node.NodeEntry, bool)
 // Policy holds the 11-dimension filter surface added in P1.
 // Zero values mean "not configured" and never filter anything out.
 type Policy struct {
-	LatencyTopN         int
-	LatencyMaxMs        int
-	LatencyP95MaxMs     int
-	MinAliveStreak      int
-	MinProbeSuccessRate float64 // 0..1
-	MaxLastProbeAge     time.Duration
-	MinNodeAge          time.Duration
-	EgressIPVersion     string // "", "v4", "v6"
+	LatencyTopN          int
+	LatencyMaxMs         int
+	LatencyP95MaxMs      int
+	MinAliveStreak       int
+	MinProbeSuccessRate  float64 // 0..1
+	MaxLastProbeAge      time.Duration
+	MinNodeAge           time.Duration
+	EgressIPVersion      string // "", "v4", "v6"
 	EgressCountryFilters []string
-	ASNFilters          []string
-	IPTypeFilters       []string
-	EgressIPFilters     []string
+	ASNFilters           []string
+	IPTypeFilters        []string
+	EgressIPFilters      []string
 }
 
 // IsZero reports whether no policy dimension is configured.
@@ -112,7 +112,9 @@ type ProbeConfig struct {
 
 // VerdictConfig is the per-platform verdict/blacklist policy (P2).
 type VerdictConfig struct {
-	Enabled               bool
+	Enabled bool
+	// RehabEnabled re-probes blacklisted IPs after RehabInterval.
+	RehabEnabled          bool
 	Threshold             int
 	RehabInterval         time.Duration
 	RehabSuccessThreshold int

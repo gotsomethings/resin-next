@@ -21,6 +21,7 @@ type probePatch struct {
 	scope           *string
 
 	verdictEnabled        *bool
+	rehabEnabled          *bool
 	blacklistThreshold    *int
 	rehabInterval         *time.Duration
 	rehabSuccessThreshold *int
@@ -36,6 +37,7 @@ func probePatchFromCreate(req CreatePlatformRequest) probePatch {
 		followRedirects:       req.ProbeFollowRedirects,
 		scope:                 req.ProbeScope,
 		verdictEnabled:        req.VerdictEnabled,
+		rehabEnabled:          req.RehabEnabled,
 		blacklistThreshold:    req.BlacklistThreshold,
 		rehabSuccessThreshold: req.RehabSuccessThreshold,
 	}
@@ -111,6 +113,11 @@ func probePatchFromMerge(patch mergePatch) (probePatch, *ServiceError) {
 	} else if ok {
 		p.verdictEnabled = boolPtr(v)
 	}
+	if v, ok, serr := patch.optionalBool("rehab_enabled"); serr != nil {
+		return p, serr
+	} else if ok {
+		p.rehabEnabled = boolPtr(v)
+	}
 	if v, ok, serr := patch.optionalInt("blacklist_threshold"); serr != nil {
 		return p, serr
 	} else if ok {
@@ -161,6 +168,9 @@ func applyProbePatch(probe *platform.ProbeConfig, verdict *platform.VerdictConfi
 	if p.verdictEnabled != nil {
 		verdict.Enabled = *p.verdictEnabled
 	}
+	if p.rehabEnabled != nil {
+		verdict.RehabEnabled = *p.rehabEnabled
+	}
 	if p.blacklistThreshold != nil {
 		verdict.Threshold = *p.blacklistThreshold
 	}
@@ -209,11 +219,14 @@ func validateVerdictConfig(v platform.VerdictConfig) *ServiceError {
 	if v.Threshold < 1 {
 		return invalidArg("blacklist_threshold: must be >= 1")
 	}
-	if v.RehabInterval < time.Minute {
-		return invalidArg("rehab_interval: must be >= 1m")
-	}
-	if v.RehabSuccessThreshold < 1 {
-		return invalidArg("rehab_success_threshold: must be >= 1")
+	// The rehab inputs are only meaningful when 黑名单复用 is on.
+	if v.RehabEnabled {
+		if v.RehabInterval < time.Minute {
+			return invalidArg("rehab_interval: must be >= 1m")
+		}
+		if v.RehabSuccessThreshold < 1 {
+			return invalidArg("rehab_success_threshold: must be >= 1")
+		}
 	}
 	return nil
 }

@@ -24,6 +24,7 @@ type FormState = {
   probe_interval: string;
   probe_scope: string;
   verdict_enabled: boolean;
+  rehab_enabled: boolean;
   blacklist_threshold: number;
   rehab_interval: string;
   rehab_success_threshold: number;
@@ -58,6 +59,7 @@ function toForm(platform: Platform): FormState {
     probe_interval: positiveDurationOrDefault(p.probe_interval, "30m0s"),
     probe_scope: p.probe_scope ?? "untested,failed,blacklisted",
     verdict_enabled: p.verdict_enabled ?? false,
+    rehab_enabled: p.rehab_enabled ?? false,
     blacklist_threshold: atLeast(p.blacklist_threshold, 1, 3),
     rehab_interval: positiveDurationOrDefault(p.rehab_interval, "6h0m0s"),
     rehab_success_threshold: atLeast(p.rehab_success_threshold, 1, 3),
@@ -216,6 +218,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
         probe_interval: form.probe_interval,
         probe_scope: form.probe_scope,
         verdict_enabled: form.verdict_enabled,
+        rehab_enabled: form.rehab_enabled,
         blacklist_threshold: form.blacklist_threshold,
         rehab_interval: form.rehab_interval,
         rehab_success_threshold: form.rehab_success_threshold,
@@ -282,7 +285,9 @@ export function PlatformPolicyPanel({ platform }: Props) {
     };
 
     intMin("blacklist_threshold", f.blacklist_threshold, 1);
-    intMin("rehab_success_threshold", f.rehab_success_threshold, 1);
+    if (f.rehab_enabled) {
+      intMin("rehab_success_threshold", f.rehab_success_threshold, 1);
+    }
     intMin("latency_top_n", f.latency_top_n, 0);
     intMin("latency_max_ms", f.latency_max_ms, 0);
     intMin("latency_p95_max_ms", f.latency_p95_max_ms, 0);
@@ -296,7 +301,9 @@ export function PlatformPolicyPanel({ platform }: Props) {
     }
 
     dur("probe_interval", f.probe_interval, 1);
-    dur("rehab_interval", f.rehab_interval, 1);
+    if (f.rehab_enabled) {
+      dur("rehab_interval", f.rehab_interval, 1);
+    }
     dur("failover_deadline", f.failover_deadline, 1);
     dur("max_last_probe_age", f.max_last_probe_age, 0);
     dur("min_node_age", f.min_node_age, 0);
@@ -434,6 +441,17 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
 
           <div>
+            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("黑名单复用")}</label>
+            <div style={{ display: "flex", alignItems: "center", height: 36 }}>
+              <Switch
+                checked={form.rehab_enabled}
+                onChange={(e) => setForm({ ...form, rehab_enabled: e.target.checked })}
+              />
+            </div>
+            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("关闭时不重探拉黑 IP")}</p>
+          </div>
+
+          <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("连续失败拉黑阈值")}</label>
             <Input
               type="number"
@@ -447,7 +465,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
           <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("黑名单复探间隔")}</label>
-            <Input value={form.rehab_interval} onChange={(e) => setForm({ ...form, rehab_interval: e.target.value })} />
+            <Input
+              value={form.rehab_interval}
+              disabled={!form.rehab_enabled}
+              onChange={(e) => setForm({ ...form, rehab_interval: e.target.value })}
+            />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 6h")}</p>
             <FieldError message={errors.rehab_interval} />
           </div>
@@ -458,6 +480,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
               type="number"
               min={1}
               value={String(form.rehab_success_threshold)}
+              disabled={!form.rehab_enabled}
               onChange={(e) => setForm({ ...form, rehab_success_threshold: num(e.target.value) })}
             />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 3 次，中间失败即重计")}</p>

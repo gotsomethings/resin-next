@@ -2,9 +2,9 @@ package platform
 
 import (
 	"fmt"
-	"time"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Resinat/Resin/internal/model"
 	"github.com/Resinat/Resin/internal/node"
@@ -213,7 +213,6 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 	), nil
 }
 
-
 // ProbeFromModel extracts the probe configuration with defaults applied.
 func ProbeFromModel(mp model.Platform) ProbeConfig {
 	p := ProbeConfig{
@@ -246,6 +245,7 @@ func ProbeFromModel(mp model.Platform) ProbeConfig {
 func VerdictFromModel(mp model.Platform) VerdictConfig {
 	v := VerdictConfig{
 		Enabled:               mp.VerdictEnabled,
+		RehabEnabled:          mp.RehabEnabled,
 		Threshold:             mp.BlacklistThreshold,
 		RehabInterval:         time.Duration(mp.RehabIntervalNs),
 		RehabSuccessThreshold: mp.RehabSuccessThreshold,
@@ -302,6 +302,7 @@ func ApplyProbeToModel(probe ProbeConfig, verdict VerdictConfig, mp *model.Platf
 	mp.ProbeIntervalNs = int64(probe.Interval)
 	mp.ProbeScope = probe.Scope
 	mp.VerdictEnabled = verdict.Enabled
+	mp.RehabEnabled = verdict.RehabEnabled
 	mp.BlacklistThreshold = verdict.Threshold
 	mp.RehabIntervalNs = int64(verdict.RehabInterval)
 	mp.RehabSuccessThreshold = verdict.RehabSuccessThreshold

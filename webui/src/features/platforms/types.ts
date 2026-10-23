@@ -45,6 +45,7 @@ export type PlatformProbeFields = {
   probe_interval: string;
   probe_scope: string;
   verdict_enabled: boolean;
+  rehab_enabled: boolean;
   blacklist_threshold: number;
   rehab_interval: string;
   rehab_success_threshold: number;

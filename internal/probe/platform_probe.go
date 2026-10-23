@@ -151,7 +151,10 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 		case "":
 			due = true
 		case "blacklisted":
-			due = lastProbe == 0 || now.Sub(time.Unix(0, lastProbe)) >= rehab
+			// 黑名单复用关闭时，拉黑 IP 不再重探。
+			if t.Verdict.RehabEnabled {
+				due = lastProbe == 0 || now.Sub(time.Unix(0, lastProbe)) >= rehab
+			}
 		default:
 			due = lastProbe == 0 || now.Sub(time.Unix(0, lastProbe)) >= interval
 		}

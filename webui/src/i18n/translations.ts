@@ -216,6 +216,8 @@ Note: Once enabled, requests without authentication information are rejected ins
   "未知": "Unknown",
   "已拉黑": "Blacklisted",
   "IP 列表状态": "IP list status",
+  "黑名单复用": "Reuse blacklisted",
+  "关闭时不重探拉黑 IP": "When off, blacklisted IPs are never re-probed",
   "IP 列表": "IP list",
   "IP 统计口径：未测 / 正常 / 失败 / 拉黑": "IP states: untested / normal / failed / blacklisted",
   "探测通过率": "Probe success rate",

@@ -95,10 +95,10 @@ var runtimeConfigAllowedFields = map[string]bool{
 	"probe_concurrency":                        true,
 	"probe_concurrency_mode":                   true,
 	// Read-only echo of the governor's live value; accepted but overwritten.
-	"probe_concurrency_effective":              true,
-	"probe_concurrency_reason":                 true,
-	"probe_concurrency_adjusted_at":            true,
-	"verdict_gc_retention":                     true,
+	"probe_concurrency_effective":   true,
+	"probe_concurrency_reason":      true,
+	"probe_concurrency_adjusted_at": true,
+	"verdict_gc_retention":          true,
 }
 
 var platformPatchAllowedFields = map[string]bool{
@@ -113,18 +113,18 @@ var platformPatchAllowedFields = map[string]bool{
 	"passive_circuit_breaker_disabled":     true,
 
 	// Policy surface (P1).
-	"latency_top_n":           true,
-	"latency_max_ms":          true,
-	"latency_p95_max_ms":      true,
-	"min_alive_streak":        true,
-	"min_probe_success_rate":  true,
-	"max_last_probe_age":      true,
-	"min_node_age":            true,
-	"egress_ip_version":       true,
-	"egress_country_filters":  true,
-	"asn_filters":             true,
-	"ip_type_filters":         true,
-	"egress_ip_filters":       true,
+	"latency_top_n":          true,
+	"latency_max_ms":         true,
+	"latency_p95_max_ms":     true,
+	"min_alive_streak":       true,
+	"min_probe_success_rate": true,
+	"max_last_probe_age":     true,
+	"min_node_age":           true,
+	"egress_ip_version":      true,
+	"egress_country_filters": true,
+	"asn_filters":            true,
+	"ip_type_filters":        true,
+	"egress_ip_filters":      true,
 
 	// Probe / verdict surface (P2).
 	"probe_enabled":           true,
@@ -137,6 +137,7 @@ var platformPatchAllowedFields = map[string]bool{
 	"probe_interval":          true,
 	"probe_scope":             true,
 	"verdict_enabled":         true,
+	"rehab_enabled":           true,
 	"blacklist_threshold":     true,
 	"rehab_interval":          true,
 	"rehab_success_threshold": true,
