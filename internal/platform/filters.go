@@ -301,7 +301,8 @@ func ValidateASNFilters(filters []string) error {
 	return nil
 }
 
-// ValidateEgressCountryFilters reuses region-code validation.
+// ValidateEgressCountryFilters validates country codes on the egress-country
+// dimension, naming that field (not region_filters) in the error.
 func ValidateEgressCountryFilters(filters []string) error {
-	return ValidateRegionFilters(filters)
+	return validateAlpha2List("egress_country_filters", filters)
 }

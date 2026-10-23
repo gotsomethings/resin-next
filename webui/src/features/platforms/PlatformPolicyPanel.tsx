@@ -100,6 +100,12 @@ function stateBadge(state: string): string {
   return "badge";
 }
 
+function stateText(t: (key: string) => string, state: string): string {
+  if (state === "normal") return t("正常");
+  if (state === "blacklisted") return t("已拉黑");
+  return t("未知");
+}
+
 export function PlatformPolicyPanel({ platform }: Props) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -591,9 +597,9 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("状态")}</label>
             <Select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
               <option value="all">{t("全部")}</option>
-              <option value="unknown">unknown</option>
-              <option value="normal">normal</option>
-              <option value="blacklisted">blacklisted</option>
+              <option value="unknown">{t("未知")}</option>
+              <option value="normal">{t("正常")}</option>
+              <option value="blacklisted">{t("已拉黑")}</option>
             </Select>
           </div>
           <div>
@@ -636,7 +642,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   <tr key={row.ip}>
                     <td>{row.ip}</td>
                     <td>
-                      <span className={stateBadge(row.state)}>{row.state || "unknown"}</span>
+                      <span className={stateBadge(row.state)}>{stateText(t, row.state || "unknown")}</span>
                     </td>
                     <td>{row.failure_count}</td>
                     <td>{row.success_streak}/{form.rehab_success_threshold}</td>

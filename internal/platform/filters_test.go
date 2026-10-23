@@ -2,6 +2,7 @@ package platform
 
 import (
 	"net/netip"
+	"strings"
 	"testing"
 )
 
@@ -142,5 +143,23 @@ func TestPolicyValidate(t *testing.T) {
 	}
 	if (Policy{LatencyTopN: 10}).IsZero() {
 		t.Fatal("non-zero policy must not report IsZero")
+	}
+}
+
+// The egress-country dimension must name itself in the error, not reuse the
+// region_filters label (that label pointed operators at the wrong field).
+func TestValidateEgressCountryFilters_NamesItsOwnField(t *testing.T) {
+	err := ValidateEgressCountryFilters([]string{"US"})
+	if err == nil {
+		t.Fatal("uppercase country code must be rejected")
+	}
+	if !strings.Contains(err.Error(), "egress_country_filters[0]") {
+		t.Fatalf("error must name egress_country_filters, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "region_filters") {
+		t.Fatalf("error must not mention region_filters, got: %v", err)
+	}
+	if err := ValidateEgressCountryFilters([]string{"us", "!jp"}); err != nil {
+		t.Fatalf("valid country filters must pass: %v", err)
 	}
 }

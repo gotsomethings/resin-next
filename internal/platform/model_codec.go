@@ -17,19 +17,26 @@ func isLowerAlpha2(s string) bool {
 	return s[0] >= 'a' && s[0] <= 'z' && s[1] >= 'a' && s[1] <= 'z'
 }
 
-// ValidateRegionFilters validates region filters against lowercase ISO alpha-2 format.
-// Entries may optionally be prefixed with "!" to indicate negation (e.g. !hk).
-func ValidateRegionFilters(regionFilters []string) error {
-	for i, r := range regionFilters {
+// validateAlpha2List validates lowercase ISO alpha-2 entries (optionally
+// prefixed with "!") and names the offending field in the error, so the
+// message matches the request field the caller actually sent.
+func validateAlpha2List(field string, list []string) error {
+	for i, r := range list {
 		code := r
 		if len(r) > 0 && r[0] == '!' {
 			code = r[1:]
 		}
 		if !isLowerAlpha2(code) {
-			return fmt.Errorf("region_filters[%d]: must be a 2-letter lowercase ISO 3166-1 alpha-2 code (e.g. us, jp) or negation (e.g. !hk)", i)
+			return fmt.Errorf("%s[%d]: must be a 2-letter lowercase ISO 3166-1 alpha-2 code (e.g. us, jp) or negation (e.g. !hk)", field, i)
 		}
 	}
 	return nil
+}
+
+// ValidateRegionFilters validates region filters against lowercase ISO alpha-2 format.
+// Entries may optionally be prefixed with "!" to indicate negation (e.g. !hk).
+func ValidateRegionFilters(regionFilters []string) error {
+	return validateAlpha2List("region_filters", regionFilters)
 }
 
 // CompileRegexFilters compiles line-oriented tag regex rules.
