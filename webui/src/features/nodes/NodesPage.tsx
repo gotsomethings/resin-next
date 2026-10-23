@@ -164,14 +164,17 @@ function draftToActiveFilters(draft: NodeFilterDraft): NodeListFilters {
       pending_test = false;
       break;
     case "circuit_open":
-      enabled = undefined;
-      has_outbound = undefined;
+      // 熔断 badge only applies to enabled nodes with an outbound; a disabled
+      // node keeps the 禁用 badge even if its breaker is stuck open.
+      enabled = true;
+      has_outbound = true;
       circuit_open = true;
       pending_test = undefined;
       break;
     case "pending_test":
-      enabled = undefined;
-      has_outbound = undefined;
+      // Same precedence as the badge: disabled / no-outbound nodes are never 待测.
+      enabled = true;
+      has_outbound = true;
       // A tripped breaker wins the badge, so 待测 must exclude it.
       circuit_open = false;
       pending_test = true;
