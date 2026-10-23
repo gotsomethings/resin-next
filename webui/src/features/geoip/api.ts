@@ -38,10 +38,18 @@ export async function lookupIPBatch(ips: string[]): Promise<GeoIPLookupResult[]>
   return data.results.map(normalizeLookupResult);
 }
 
-export async function updateGeoIPNow(): Promise<GeoIPUpdateResponse> {
-  const data = await apiRequest<GeoIPUpdateResponse>(`${basePath}/actions/update-now`, {
-    method: "POST",
-  });
+export type GeoIPUpdateTarget = "geoip" | "asn" | "all";
+
+export async function updateGeoIPNow(
+  target: GeoIPUpdateTarget = "all",
+): Promise<GeoIPUpdateResponse> {
+  const query = new URLSearchParams({ target });
+  const data = await apiRequest<GeoIPUpdateResponse>(
+    `${basePath}/actions/update-now?${query.toString()}`,
+    {
+      method: "POST",
+    },
+  );
   return {
     status: data.status || "",
   };

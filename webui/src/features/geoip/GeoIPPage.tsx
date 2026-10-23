@@ -55,11 +55,22 @@ export function GeoIPPage() {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: updateGeoIPNow,
+  const geoipUpdateMutation = useMutation({
+    mutationFn: () => updateGeoIPNow("geoip"),
     onSuccess: async () => {
       await statusQuery.refetch();
       showToast("success", t("GeoIP 数据库更新任务已执行"));
+    },
+    onError: (error) => {
+      showToast("error", formatApiErrorMessage(error, t));
+    },
+  });
+
+  const asnUpdateMutation = useMutation({
+    mutationFn: () => updateGeoIPNow("asn"),
+    onSuccess: async () => {
+      await statusQuery.refetch();
+      showToast("success", t("ASN 数据库更新任务已执行"));
     },
     onError: (error) => {
       showToast("error", formatApiErrorMessage(error, t));
@@ -100,8 +111,8 @@ export function GeoIPPage() {
       <Card className="platform-cards-container platform-directory-card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div className="list-card-header">
           <div>
-            <h3>GeoIP</h3>
-            <p>{t("可查看数据库状态并进行 IP 查询。")}</p>
+            <h3>{t("GeoIP(国家)与 ASN 数据库")}</h3>
+            <p>{t("查询 IP 所在地区")}</p>
           </div>
           <Button variant="secondary" size="sm" onClick={() => void statusQuery.refetch()} disabled={statusQuery.isFetching}>
             <RefreshCw size={16} className={statusQuery.isFetching ? "spin" : undefined} />
@@ -113,7 +124,7 @@ export function GeoIPPage() {
           <Card className="geoip-status-card">
             <div className="detail-header">
               <div>
-                <h3>{t("数据库状态")}</h3>
+                <h3>{t("GeoIP 库状态")}</h3>
                 <p>{t("当前加载时间与下一次计划更新时间")}</p>
               </div>
               <Database size={16} />
@@ -141,9 +152,9 @@ export function GeoIPPage() {
               <Badge variant={statusVariant(hasDBTime)}>
                 {hasDBTime ? t("数据库已加载") : t("数据库未加载")}
               </Badge>
-              <Button size="sm" variant="secondary" onClick={() => void updateMutation.mutateAsync()} disabled={updateMutation.isPending}>
-                <ArrowDownToLine size={14} className={updateMutation.isPending ? "spin" : undefined} />
-                {updateMutation.isPending ? t("更新中...") : t("立即更新")}
+              <Button size="sm" variant="secondary" onClick={() => void geoipUpdateMutation.mutateAsync()} disabled={geoipUpdateMutation.isPending}>
+                <ArrowDownToLine size={14} className={geoipUpdateMutation.isPending ? "spin" : undefined} />
+                {geoipUpdateMutation.isPending ? t("更新中...") : t("立即更新")}
               </Button>
             </div>
           </Card>
@@ -178,9 +189,9 @@ export function GeoIPPage() {
               <Badge variant={statusVariant(asnAvailable)}>
                 {asnAvailable ? t("ASN 数据库已加载") : t("ASN 数据库未加载")}
               </Badge>
-              <Button size="sm" variant="secondary" onClick={() => void updateMutation.mutateAsync()} disabled={updateMutation.isPending}>
-                <ArrowDownToLine size={14} className={updateMutation.isPending ? "spin" : undefined} />
-                {updateMutation.isPending ? t("更新中...") : t("立即更新")}
+              <Button size="sm" variant="secondary" onClick={() => void asnUpdateMutation.mutateAsync()} disabled={asnUpdateMutation.isPending || !asnAvailable}>
+                <ArrowDownToLine size={14} className={asnUpdateMutation.isPending ? "spin" : undefined} />
+                {asnUpdateMutation.isPending ? t("更新中...") : t("立即更新")}
               </Button>
             </div>
           </Card>

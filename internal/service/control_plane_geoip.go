@@ -55,10 +55,25 @@ func (s *ControlPlaneService) LookupIP(ipStr string) (string, error) {
 	return region, nil
 }
 
-// UpdateGeoIPNow triggers an immediate GeoIP database update (blocks).
-func (s *ControlPlaneService) UpdateGeoIPNow() error {
-	if err := s.GeoIP.UpdateNow(); err != nil {
-		return internal("geoip update failed", err)
+// UpdateGeoIPNow triggers an immediate database update (blocks). target selects
+// which database: "geoip" (country only), "asn" (ASN only) or "all" (both); an
+// empty target keeps the historical behaviour and refreshes both.
+func (s *ControlPlaneService) UpdateGeoIPNow(target string) error {
+	switch target {
+	case "", "all":
+		if err := s.GeoIP.UpdateAllNow(); err != nil {
+			return internal("geoip update failed", err)
+		}
+	case "geoip":
+		if err := s.GeoIP.UpdateNow(); err != nil {
+			return internal("geoip update failed", err)
+		}
+	case "asn":
+		if err := s.GeoIP.UpdateASNNow(); err != nil {
+			return internal("geoip update failed", err)
+		}
+	default:
+		return invalidArg("target: must be one of geoip|asn|all")
 	}
 	return nil
 }
