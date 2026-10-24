@@ -991,12 +991,13 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
                   return (
                     <tr key={row.ip}>
-                      <td>
+                      <td style={{ width: 168, maxWidth: 168 }}>
                         <div
                           style={{
                             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                             fontSize: 12,
-                            overflowWrap: "anywhere",
+                            lineHeight: 1.35,
+                            wordBreak: "break-all",
                           }}
                         >
                           {row.ip}
