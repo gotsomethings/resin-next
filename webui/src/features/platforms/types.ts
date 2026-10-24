@@ -128,6 +128,9 @@ export type EgressIPRow = {
   ip_type?: EgressIPType;
   state: EgressIPState;
   node_count: number;
+  base_node_count: number;
+  in_base_pool: boolean;
+  in_advanced_pool: boolean;
   failure_count: number;
   success_streak: number;
   last_status_code: number;

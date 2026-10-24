@@ -837,7 +837,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
       <section className="syscfg-section">
         <h4>{t("IP 列表")}</h4>
         <p className="muted">
-          {t("展示平台配置与高级设置共同过滤后的全部出口 IP；未测与拉黑仍在列。")}
+          {t("列表 = Resin 基础池 ∪ 高级池 ∪ 台账，实时刷新；被高级规则剔除的 IP 只退回基础池，不会消失。")}
         </p>
 
         <div
@@ -916,6 +916,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   <th>{t("类型")}</th>
                   <th>{t("总节点")}</th>
                   <th>{t("状态")}</th>
+                  <th>{t("池")}</th>
                   <th>{t("黑名单连续成功")}</th>
                   <th>{t("状态码")}</th>
                   <th>{t("时间")}</th>
@@ -934,6 +935,15 @@ export function PlatformPolicyPanel({ platform }: Props) {
                       <td>{row.node_count}</td>
                       <td>
                         <span className={stateBadge(row.state)}>{stateText(t, row.state || "unknown")}</span>
+                      </td>
+                      <td>
+                        {row.in_advanced_pool ? (
+                          <span className="badge badge-success">{t("高级")}</span>
+                        ) : row.in_base_pool ? (
+                          <span className="badge">{t("仅基础")}</span>
+                        ) : (
+                          <span className="badge badge-warning">{t("已离池")}</span>
+                        )}
                       </td>
                       <td>{row.state === "blacklisted" ? row.success_streak : "-"}</td>
                       <td>{row.last_status_code > 0 ? row.last_status_code : "-"}</td>
