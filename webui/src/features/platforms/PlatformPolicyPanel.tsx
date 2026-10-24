@@ -226,7 +226,7 @@ const IP_FILTER_ITEM_STYLE = {
   width: 140,
 };
 const IP_FILTER_LABEL_STYLE = { fontSize: "0.75rem", lineHeight: "16px", color: "var(--text-secondary)" };
-const IP_FILTER_CONTROL_STYLE = { width: 140, height: 36, boxSizing: "border-box" as const };
+const IP_FILTER_CONTROL_STYLE = { width: 140, height: 36, boxSizing: "border-box" as const, fontSize: 12 };
 const IP_FILTER_BUTTON_STYLE = { height: 36, paddingInline: 18 };
 const IP_FILTER_COUNT_STYLE = { height: 36, display: "flex", alignItems: "center", fontSize: 12 };
 
@@ -963,9 +963,18 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   <th style={{ width: 150 }}>{t("IP")}</th>
                   <th>{t("国家")}</th>
                   <th>{t("类型")}</th>
-                  <th>{t("总节点")}</th>
+                  <th>{t("节点数")}</th>
                   <th>{t("状态")}</th>
-                  <th>{t("黑名单连续成功")}</th>
+                  <th
+                    style={{ whiteSpace: "nowrap" }}
+                    title={
+                      form.rehab_enabled
+                        ? t("探测连续成功 {{n}} 次解除拉黑", { n: form.rehab_success_threshold })
+                        : undefined
+                    }
+                  >
+                    {t("拉黑探测")}
+                  </th>
                   <th>{t("状态码")}</th>
                   <th>{t("时间")}</th>
                   <th>{t("近 {{min}} 分钟通过率", { min: form.probe_rate_window_minutes })}</th>
