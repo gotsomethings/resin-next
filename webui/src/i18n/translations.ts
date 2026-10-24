@@ -227,6 +227,8 @@ Note: Once enabled, requests without authentication information are rejected ins
   "黑名单连续成功": "Blacklist success streak",
   "状态码": "Status code",
   "手动拉黑": "Manual blacklist",
+  "使用中": "In use",
+  "仅列出通过高级规则过滤、当前有节点的出口 IP；带「使用中」标记的正在被租约使用。": "Only egress IPs that pass the advanced rules and currently have nodes; those marked in use are held by leases.",
   "池": "Pool",
   "所属池": "Pool",
   "高级": "Advanced",

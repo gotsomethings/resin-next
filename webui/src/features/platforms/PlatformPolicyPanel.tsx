@@ -869,7 +869,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
       <section className="syscfg-section">
         <h4>{t("IP 列表")}</h4>
         <p className="muted">
-          {t("列表 = Resin 基础池 ∪ 高级池 ∪ 台账，实时刷新；被高级规则剔除的 IP 只退回基础池，不会消失。")}
+          {t("仅列出通过高级规则过滤、当前有节点的出口 IP；带「使用中」标记的正在被租约使用。")}
         </p>
 
         <div style={IP_FILTER_BAR_STYLE}>
@@ -960,12 +960,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>{t("IP")}</th>
+                  <th style={{ width: 150 }}>{t("IP")}</th>
                   <th>{t("国家")}</th>
                   <th>{t("类型")}</th>
                   <th>{t("总节点")}</th>
                   <th>{t("状态")}</th>
-                  <th>{t("所属池")}</th>
                   <th>{t("黑名单连续成功")}</th>
                   <th>{t("状态码")}</th>
                   <th>{t("时间")}</th>
@@ -978,21 +977,27 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
                   return (
                     <tr key={row.ip}>
-                      <td>{row.ip}</td>
+                      <td style={{ maxWidth: 170 }}>
+                        <div
+                          style={{
+                            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                            fontSize: 12,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {row.ip}
+                        </div>
+                        {row.in_use ? (
+                          <span className="badge badge-success" style={{ marginTop: 4, fontSize: 11 }}>
+                            {t("使用中")}{row.lease_count > 1 ? ` ×${row.lease_count}` : ""}
+                          </span>
+                        ) : null}
+                      </td>
                       <td>{countryLabel(row.country, locale)}</td>
                       <td>{ipTypeText(t, row.ip_type)}</td>
                       <td>{row.node_count}</td>
                       <td>
                         <span className={stateBadge(row.state)}>{stateText(t, row.state || "unknown")}</span>
-                      </td>
-                      <td>
-                        {row.in_advanced_pool ? (
-                          <span className="badge badge-success">{t("高级")}</span>
-                        ) : row.in_base_pool ? (
-                          <span className="badge">{t("仅基础")}</span>
-                        ) : (
-                          <span className="badge badge-warning">{t("已离池")}</span>
-                        )}
                       </td>
                       <td>{row.state === "blacklisted" ? row.success_streak : "-"}</td>
                       <td>{row.last_status_code > 0 ? row.last_status_code : "-"}</td>

@@ -14,6 +14,7 @@ import (
 	"github.com/Resinat/Resin/internal/model"
 	"github.com/Resinat/Resin/internal/node"
 	"github.com/Resinat/Resin/internal/platform"
+	"github.com/Resinat/Resin/internal/routing"
 	"github.com/Resinat/Resin/internal/state"
 )
 
@@ -992,9 +993,8 @@ type PlatformEgressIPResponse struct {
 	IPType          string   `json:"ip_type,omitempty"`
 	State           string   `json:"state"`
 	NodeCount       int      `json:"node_count"`
-	BaseNodeCount   int      `json:"base_node_count"`
-	InBasePool      bool     `json:"in_base_pool"`
-	InAdvancedPool  bool     `json:"in_advanced_pool"`
+	InUse           bool     `json:"in_use"`
+	LeaseCount      int      `json:"lease_count"`
 	FailureCount    int      `json:"failure_count"`
 	SuccessStreak   int      `json:"success_streak"`
 	LastStatusCode  int      `json:"last_status_code"`
@@ -1039,7 +1039,6 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 	now := time.Now()
 	var window time.Duration
 	aggs := make(map[string]*ipAgg)
-	baseCounts := make(map[string]int)
 
 	if s.Pool != nil {
 		if rt, ok := s.Pool.GetPlatform(platformID); ok && rt != nil {
@@ -1052,10 +1051,6 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 				if !ip.IsValid() || entry.IsDisabledBySubscriptions(subLookup) {
 					return true
 				}
-				// The Resin base pool holds every usable IP; the advanced pool is the
-				// platform-filtered subset on top of it.
-				baseKey := ip.Unmap().String()
-				baseCounts[baseKey]++
 				if !rt.MatchesConfigFilters(entry, subLookup, geo) {
 					return true
 				}
@@ -1100,46 +1095,34 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 		}
 	}
 
-	// The list is the union of the Resin base pool, the advanced pool and the
-	// verdict ledger: an IP filtered out of the advanced rules only falls back to
-	// the base pool and must stay visible (and live) instead of disappearing.
-	keys := make(map[string]struct{}, len(aggs)+len(baseCounts)+len(ledger))
-	for k := range aggs {
-		keys[k] = struct{}{}
-	}
-	for k := range baseCounts {
-		keys[k] = struct{}{}
-	}
-	for k := range ledger {
-		keys[k] = struct{}{}
+	// Only IPs that currently have nodes inside the advanced pool are listed: an
+	// IP without nodes cannot be used, so a stale ledger state must not make it
+	// look available.
+	leaseCounts := make(map[string]int)
+	if s.Router != nil && s.Pool != nil {
+		if _, ok := s.Pool.GetPlatform(platformID); ok {
+			nowNs := now.UnixNano()
+			s.Router.RangeLeases(platformID, func(_ string, lease routing.Lease) bool {
+				if lease.ExpiryNs > 0 && lease.ExpiryNs <= nowNs {
+					return true
+				}
+				leaseCounts[lease.EgressIP.String()]++
+				return true
+			})
+		}
 	}
 
-	geo := s.geoLookup()
-	asn := s.asnLookupFunc()
-	out := make([]PlatformEgressIPResponse, 0, len(keys))
-	for ip := range keys {
+	out := make([]PlatformEgressIPResponse, 0, len(aggs))
+	for ip, a := range aggs {
 		row := PlatformEgressIPResponse{
-			IP:   ip,
-			State: string(VerdictUnknown),
+			IP:        ip,
+			Country:   a.country,
+			IPType:    a.ipType,
+			NodeCount: a.count,
+			State:     string(VerdictUnknown),
 		}
-		a := aggs[ip]
-		if a != nil {
-			row.Country = a.country
-			row.IPType = a.ipType
-			row.NodeCount = a.count
-		} else if addr, err := netip.ParseAddr(ip); err == nil {
-			if geo != nil {
-				row.Country = geo(addr)
-			}
-			if asn != nil {
-				if info, ok := asn(addr); ok {
-					row.IPType = platform.ClassifyIPType(info)
-				}
-			}
-		}
-		row.BaseNodeCount = baseCounts[ip]
-		row.InBasePool = row.BaseNodeCount > 0
-		row.InAdvancedPool = row.NodeCount > 0
+		row.LeaseCount = leaseCounts[ip]
+		row.InUse = row.LeaseCount > 0
 		if r, ok := ledger[ip]; ok {
 			row.FailureCount = r.FailureCount
 			row.SuccessStreak = r.SuccessStreak
@@ -1158,10 +1141,10 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 				row.State = "failed"
 			}
 		}
-		if row.JoinedAt == "" && a != nil && a.joined > 0 {
+		if row.JoinedAt == "" && a.joined > 0 {
 			row.JoinedAt = formatUnixNs(a.joined)
 		}
-		if a != nil && a.total > 0 {
+		if a.total > 0 {
 			rate := float64(a.succ) / float64(a.total)
 			row.SuccessRate = &rate
 		}
