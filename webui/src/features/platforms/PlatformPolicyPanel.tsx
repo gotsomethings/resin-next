@@ -208,9 +208,41 @@ function ipTypeText(t: (key: string) => string, type: string | undefined): strin
   return t("其他");
 }
 
-const IP_FILTER_ITEM_STYLE = { display: "flex", flexDirection: "column" as const, gap: "0.25rem" };
-const IP_FILTER_LABEL_STYLE = { fontSize: "0.75rem", color: "var(--text-secondary)" };
-const IP_FILTER_CONTROL_STYLE = { minWidth: 150 };
+const IP_FILTER_BAR_STYLE = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: 10,
+  alignItems: "flex-end",
+  marginTop: 12,
+  padding: 12,
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+};
+const IP_FILTER_ITEM_STYLE = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 6,
+  flex: "0 0 auto",
+  width: 140,
+};
+const IP_FILTER_LABEL_STYLE = { fontSize: "0.75rem", lineHeight: "16px", color: "var(--text-secondary)" };
+const IP_FILTER_CONTROL_STYLE = { width: 140, height: 36, boxSizing: "border-box" as const };
+const IP_FILTER_BUTTON_STYLE = { height: 36, paddingInline: 18 };
+const IP_FILTER_COUNT_STYLE = { height: 36, display: "flex", alignItems: "center", fontSize: 12 };
+
+// ISO-3166 alpha-2 -> localized country name, falling back to the raw code.
+function countryLabel(code: string | undefined, locale: string): string {
+  if (!code) return "-";
+  const up = code.trim().toUpperCase();
+  try {
+    const dn = new Intl.DisplayNames([locale === "en-US" ? "en" : "zh-CN"], { type: "region" });
+    const name = dn.of(up);
+    if (name && name !== up) return `${name} ${up}`;
+  } catch {
+    // Intl.DisplayNames is unavailable in some runtimes; the code still works.
+  }
+  return up;
+}
 
 // Manual blacklist toggle: off = neutral track with the knob left, on = the
 // knob slides right over a red track.
@@ -260,7 +292,7 @@ function BlacklistToggle({
 }
 
 export function PlatformPolicyPanel({ platform }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => toForm(platform));
   const [notice, setNotice] = useState<string>("");
@@ -840,10 +872,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           {t("列表 = Resin 基础池 ∪ 高级池 ∪ 台账，实时刷新；被高级规则剔除的 IP 只退回基础池，不会消失。")}
         </p>
 
-        <div
-          className="nodes-inline-filters"
-          style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-end", marginTop: 12 }}
-        >
+        <div style={IP_FILTER_BAR_STYLE}>
           <div style={IP_FILTER_ITEM_STYLE}>
             <label style={IP_FILTER_LABEL_STYLE}>{t("IP")}</label>
             <Input
@@ -864,7 +893,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
           <div style={IP_FILTER_ITEM_STYLE}>
             <label style={IP_FILTER_LABEL_STYLE}>{t("类型")}</label>
-            <Select value={egressType} onChange={(e) => setEgressType(e.target.value as typeof egressType)}>
+            <Select
+              value={egressType}
+              onChange={(e) => setEgressType(e.target.value as typeof egressType)}
+              style={IP_FILTER_CONTROL_STYLE}
+            >
               <option value="all">{t("全部")}</option>
               <option value="residential">{t("住宅")}</option>
               <option value="hosting">{t("机房")}</option>
@@ -874,7 +907,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
           <div style={IP_FILTER_ITEM_STYLE}>
             <label style={IP_FILTER_LABEL_STYLE}>{t("状态")}</label>
-            <Select value={egressState} onChange={(e) => setEgressState(e.target.value as typeof egressState)}>
+            <Select
+              value={egressState}
+              onChange={(e) => setEgressState(e.target.value as typeof egressState)}
+              style={IP_FILTER_CONTROL_STYLE}
+            >
               <option value="all">{t("全部")}</option>
               <option value="unknown">{t("未测")}</option>
               <option value="normal">{t("正常")}</option>
@@ -884,7 +921,11 @@ export function PlatformPolicyPanel({ platform }: Props) {
           </div>
           <div style={IP_FILTER_ITEM_STYLE}>
             <label style={IP_FILTER_LABEL_STYLE}>{t("排序")}</label>
-            <Select value={egressSort} onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}>
+            <Select
+              value={egressSort}
+              onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}
+              style={IP_FILTER_CONTROL_STYLE}
+            >
               <option value="ip_asc">{t("IP 字典序")}</option>
               <option value="failure_desc">{t("连续失败 ↓")}</option>
               <option value="failure_asc">{t("连续失败 ↑")}</option>
@@ -892,10 +933,18 @@ export function PlatformPolicyPanel({ platform }: Props) {
               <option value="probe_asc">{t("最近探测时间 ↑")}</option>
             </Select>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => void egressQuery.refetch()} disabled={egressQuery.isFetching}>
+          <Button
+            variant="secondary"
+            size="sm"
+            style={IP_FILTER_BUTTON_STYLE}
+            onClick={() => void egressQuery.refetch()}
+            disabled={egressQuery.isFetching}
+          >
             {t("刷新")}
           </Button>
-          <span className="muted">{visibleEgressRows.length} / {allEgressRows.length}</span>
+          <span className="muted" style={IP_FILTER_COUNT_STYLE}>
+            {visibleEgressRows.length} / {allEgressRows.length}
+          </span>
         </div>
 
         {egressQuery.isLoading ? <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{t("加载中...")}</p> : null}
@@ -916,7 +965,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   <th>{t("类型")}</th>
                   <th>{t("总节点")}</th>
                   <th>{t("状态")}</th>
-                  <th>{t("池")}</th>
+                  <th>{t("所属池")}</th>
                   <th>{t("黑名单连续成功")}</th>
                   <th>{t("状态码")}</th>
                   <th>{t("时间")}</th>
@@ -930,7 +979,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   return (
                     <tr key={row.ip}>
                       <td>{row.ip}</td>
-                      <td>{row.country ? row.country.toUpperCase() : "-"}</td>
+                      <td>{countryLabel(row.country, locale)}</td>
                       <td>{ipTypeText(t, row.ip_type)}</td>
                       <td>{row.node_count}</td>
                       <td>
