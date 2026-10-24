@@ -229,6 +229,7 @@ Note: Once enabled, requests without authentication information are rejected ins
   "手动拉黑": "Manual blacklist",
   "使用中": "In use",
   "拉黑探测": "Blacklist probe",
+  "近 {{min}} 分钟探测成功率": "Probe success rate over the last {{min}} min",
   "探测连续成功 {{n}} 次解除拉黑": "{{n}} consecutive successful probes lift the blacklist",
   "仅列出通过高级规则过滤、当前有节点的出口 IP；带「使用中」标记的正在被租约使用。": "Only egress IPs that pass the advanced rules and currently have nodes; those marked in use are held by leases.",
   "池": "Pool",

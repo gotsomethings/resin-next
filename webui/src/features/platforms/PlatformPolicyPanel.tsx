@@ -982,7 +982,12 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   </th>
                   <th>{t("状态码")}</th>
                   <th>{t("时间")}</th>
-                  <th>{t("近 {{min}} 分钟通过率", { min: form.probe_rate_window_minutes })}</th>
+                  <th
+                    style={{ whiteSpace: "nowrap" }}
+                    title={t("近 {{min}} 分钟探测成功率", { min: form.probe_rate_window_minutes })}
+                  >
+                    {t("成功率")}
+                  </th>
                   <th>{t("手动拉黑")}</th>
                 </tr>
               </thead>
@@ -991,7 +996,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
                   return (
                     <tr key={row.ip}>
-                      <td style={{ width: 168, maxWidth: 168 }}>
+                      <td style={{ width: 128, maxWidth: 128 }}>
                         <div
                           style={{
                             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
