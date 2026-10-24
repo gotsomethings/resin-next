@@ -966,13 +966,12 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: 150 }}>{t("IP")}</th>
-                  <th style={{ width: 92 }}>{t("国家")}</th>
-                  <th style={{ width: 72 }}>{t("类型")}</th>
-                  <th style={{ width: 72 }}>{t("节点数")}</th>
-                  <th style={{ width: 78 }}>{t("状态")}</th>
+                  <th>{t("IP")}</th>
+                  <th>{t("类型")}</th>
+                  <th>{t("节点数")}</th>
+                  <th>{t("状态")}</th>
                   <th
-                    style={{ width: 88, whiteSpace: "nowrap" }}
+                    style={{ whiteSpace: "nowrap" }}
                     title={
                       form.rehab_enabled
                         ? t("探测连续成功 {{n}} 次解除拉黑", { n: form.rehab_success_threshold })
@@ -992,7 +991,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
                   return (
                     <tr key={row.ip}>
-                      <td style={{ maxWidth: 170 }}>
+                      <td>
                         <div
                           style={{
                             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -1002,13 +1001,15 @@ export function PlatformPolicyPanel({ platform }: Props) {
                         >
                           {row.ip}
                         </div>
-                        {row.in_use ? (
-                          <span className="badge badge-success" style={{ marginTop: 4, fontSize: 11 }}>
-                            {t("使用中")}{row.lease_count > 1 ? ` ×${row.lease_count}` : ""}
-                          </span>
-                        ) : null}
+                        <div className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>
+                          {countryLabel(row.country, locale)}
+                          {row.in_use ? (
+                            <span className="badge badge-success" style={{ marginLeft: 6, fontSize: 11 }}>
+                              {t("使用中")}{row.lease_count > 1 ? ` ×${row.lease_count}` : ""}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
-                      <td>{countryLabel(row.country, locale)}</td>
                       <td>{ipTypeText(t, row.ip_type)}</td>
                       <td>{row.node_count}</td>
                       <td>
