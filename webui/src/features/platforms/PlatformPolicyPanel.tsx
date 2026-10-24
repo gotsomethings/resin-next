@@ -963,7 +963,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
 
         {visibleEgressRows.length ? (
           <div className="table-wrap" style={{ marginTop: 12 }}>
-            <table className="data-table">
+            <table className="data-table" style={{ minWidth: 0, fontSize: 12 }}>
               <thead>
                 <tr>
                   <th>{t("IP")}</th>
