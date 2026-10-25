@@ -28,6 +28,13 @@ type PlatformTarget struct {
 	ID      string
 	Probe   platform.ProbeConfig
 	Verdict platform.VerdictConfig
+	// Matches reports whether a pool node belongs to this platform's probe
+	// scope. It mirrors the IP-list filter: healthy node plus the platform's
+	// static configuration filters. The verdict blacklist is not part of it, so
+	// blacklisted IPs stay eligible for rehab probing, and the probe-rate/age
+	// dimensions are excluded to avoid a feedback loop where a low rate would
+	// drop the node from the scope and freeze the rate forever.
+	Matches func(*node.NodeEntry) bool
 }
 
 // PlatformProbeConfig configures the per-platform probe loop.
@@ -138,6 +145,9 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 	p.cfg.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
 		ip := entry.GetEgressIP()
 		if !ip.IsValid() || !entry.IsHealthy() {
+			return true
+		}
+		if t.Matches != nil && !t.Matches(entry) {
 			return true
 		}
 		key := ip.String()

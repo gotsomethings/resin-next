@@ -1024,13 +1024,18 @@ type ipAgg struct {
 }
 
 // ListPlatformEgress returns the platform IP list: every egress IP whose nodes
-// pass the platform's static configuration filters (subscription, tags, region,
-// node age, egress version/country, ASN, IP type, manual IP allow/deny), joined
-// with the verdict ledger.
+// are healthy (outbound ready, circuit closed) and pass the platform's static
+// configuration filters (subscription, tags, region, node age, egress
+// version/country, ASN, IP type, manual IP allow/deny), joined with the verdict
+// ledger.
 //
-// Runtime dimensions (health, latency, alive streak, probe rate, last probe age)
-// and the blacklist deliberately do not filter the list: untested and
-// blacklisted IPs must stay visible with their state.
+// Circuit-open nodes are excluded: Resin has already decided the node is
+// unusable, so its IP is not part of the platform's IP library.
+//
+// The verdict blacklist and the probe-rate/age dimensions deliberately do not
+// filter the list: a blacklisted IP stays visible with its state until Resin
+// itself marks its nodes unhealthy, and untested IPs must stay visible so the
+// platform probe can accumulate samples.
 func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformEgressIPResponse, error) {
 	if _, err := s.getPlatformModel(platformID); err != nil {
 		return nil, err
@@ -1049,6 +1054,9 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 			s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
 				ip := entry.GetEgressIP()
 				if !ip.IsValid() || entry.IsDisabledBySubscriptions(subLookup) {
+					return true
+				}
+				if !entry.IsHealthy() {
 					return true
 				}
 				if !rt.MatchesConfigFilters(entry, subLookup, geo) {

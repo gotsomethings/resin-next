@@ -89,6 +89,9 @@ func probePatchFromMerge(patch mergePatch) (probePatch, *ServiceError) {
 	if v, ok, serr := patch.optionalIntSlice("probe_pass_status"); serr != nil {
 		return p, serr
 	} else if ok {
+		if len(v) == 0 {
+			return p, invalidArg("probe_pass_status: at least one status code is required")
+		}
 		p.passStatus = v
 		p.hasPassStatus = true
 	}

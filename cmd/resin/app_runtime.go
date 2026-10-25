@@ -482,8 +482,18 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 		},
 		Targets: func() []probe.PlatformTarget {
 			var out []probe.PlatformTarget
+			subLookup := a.topoRuntime.pool.MakeSubLookup()
+			geo := a.geoSvc.Lookup
 			a.topoRuntime.pool.RangePlatforms(func(pl *platform.Platform) bool {
-				out = append(out, probe.PlatformTarget{ID: pl.ID, Probe: pl.Probe, Verdict: pl.Verdict})
+				plat := pl
+				out = append(out, probe.PlatformTarget{
+					ID:      plat.ID,
+					Probe:   plat.Probe,
+					Verdict: plat.Verdict,
+					Matches: func(entry *node.NodeEntry) bool {
+						return plat.MatchesConfigFilters(entry, subLookup, geo)
+					},
+				})
 				return true
 			})
 			return out
