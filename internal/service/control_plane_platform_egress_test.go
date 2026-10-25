@@ -105,4 +105,16 @@ func TestListPlatformEgress_ExcludesCircuitOpenNodes(t *testing.T) {
 	if rows[0].NodeCount != 1 {
 		t.Fatalf("node_count: got %d, want 1", rows[0].NodeCount)
 	}
+
+	// A blacklisted IP stays listed while its node is still healthy: that row is
+	// how an operator sees the state and releases it again.
+	plat.Verdict.Enabled = true
+	plat.BlacklistLookup = func(ip netip.Addr) bool { return ip.String() == "1.1.1.1" }
+	rows, err = cp.ListPlatformEgress(platform.DefaultPlatformID)
+	if err != nil {
+		t.Fatalf("ListPlatformEgress (blacklisted): %v", err)
+	}
+	if len(rows) != 1 || rows[0].IP != "1.1.1.1" {
+		t.Fatalf("blacklisted IP must stay listed while healthy: %+v", rows)
+	}
 }

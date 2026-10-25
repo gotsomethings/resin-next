@@ -360,6 +360,28 @@ func (p *Platform) evaluateNode(
 	subLookup node.SubLookupFunc,
 	geoLookup GeoLookupFunc,
 ) bool {
+	return p.evaluateNodeWith(entry, subLookup, geoLookup, true)
+}
+
+// EvaluateForList reports whether the node belongs to the platform's IP list.
+// It applies the same dimensions as evaluateNode except the verdict blacklist: a
+// blacklisted IP stays listed with its blacklist state while Resin still regards
+// its nodes as healthy, so a rehab probe or a manual release can revive it
+// without the row ever disappearing in between.
+func (p *Platform) EvaluateForList(
+	entry *node.NodeEntry,
+	subLookup node.SubLookupFunc,
+	geoLookup GeoLookupFunc,
+) bool {
+	return p.evaluateNodeWith(entry, subLookup, geoLookup, false)
+}
+
+func (p *Platform) evaluateNodeWith(
+	entry *node.NodeEntry,
+	subLookup node.SubLookupFunc,
+	geoLookup GeoLookupFunc,
+	useBlacklist bool,
+) bool {
 	if !p.MatchesConfigFilters(entry, subLookup, geoLookup) {
 		return false
 	}
@@ -369,9 +391,10 @@ func (p *Platform) evaluateNode(
 		return false
 	}
 
-	// 2. Per-platform blacklist (verdict state machine).
+	// 2. Per-platform blacklist (verdict state machine). Skipped for the IP list,
+	// which reports blacklisted IPs with their state instead of hiding them.
 	egressIP := entry.GetEgressIP()
-	if p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
+	if useBlacklist && p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
 		return false
 	}
 

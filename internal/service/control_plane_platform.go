@@ -1023,15 +1023,14 @@ type ipAgg struct {
 	total   int
 }
 
-// ListPlatformEgress returns the platform IP list: the platform's own IP pool
-// (Resin's routable view — nodes that passed the platform configuration,
-// including the advanced filter dimensions, and are healthy), joined with the
-// verdict ledger.
+// ListPlatformEgress returns the platform IP list: the platform's own IP library,
+// i.e. every node that is healthy and passes the platform's filters (base config +
+// advanced dimensions, including latency, probe rate and probe age), joined with
+// the verdict ledger.
 //
-// The list never re-filters the global pool with its own rules: circuit-open or
-// otherwise ineligible nodes are simply not in the view. The verdict blacklist
-// and the probe-rate/age dimensions do not filter the list, so a blacklisted IP
-// stays visible with its state until Resin itself drops its node from the view.
+// The verdict blacklist is not a filter here: a blacklisted IP stays listed with
+// its state while Resin still regards its nodes as healthy, so a rehab probe or a
+// manual release can revive it without the row disappearing in between.
 func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformEgressIPResponse, error) {
 	if _, err := s.getPlatformModel(platformID); err != nil {
 		return nil, err
@@ -1046,13 +1045,14 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 			window = rt.Policy.MinProbeSuccessRateWindow
 			geo := s.geoLookup()
 			asn := s.asnLookupFunc()
-			// The list is the platform's own IP pool: Resin's routable view already
-			// holds the nodes that passed the platform configuration (including the
-			// advanced filter dimensions) and are healthy. We only join probe state
-			// on top instead of re-filtering the whole pool with our own rules.
-			rt.View().Range(func(h node.Hash) bool {
-				entry, ok := s.Pool.GetEntry(h)
-				if !ok {
+			subLookup := s.Pool.MakeSubLookup()
+			// The list is the platform's IP library: the platform's own filters (base
+			// config + advanced dimensions, including probe rate and probe age) decide
+			// membership, and the node must be healthy. The verdict blacklist is not a
+			// filter here: a blacklisted IP stays listed with its state so it can be
+			// revived by a rehab probe or released manually.
+			s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+				if !rt.EvaluateForList(entry, subLookup, geo) {
 					return true
 				}
 				ip := entry.GetEgressIP()
