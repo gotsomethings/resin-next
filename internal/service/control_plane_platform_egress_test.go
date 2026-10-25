@@ -49,7 +49,7 @@ func TestListPlatformEgress_ExcludesCircuitOpenNodes(t *testing.T) {
 		MaxConsecutiveFailures: func() int { return 3 },
 		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
 	})
-	pool.RegisterPlatform(platform.NewConfiguredPlatform(
+	plat := platform.NewConfiguredPlatform(
 		row.ID,
 		row.Name,
 		node.TagFilter{},
@@ -60,7 +60,8 @@ func TestListPlatformEgress_ExcludesCircuitOpenNodes(t *testing.T) {
 		"",
 		row.AllocationPolicy,
 		true,
-	))
+	)
+	pool.RegisterPlatform(plat)
 
 	addNode := func(server, egressIP string, circuitOpen bool) {
 		t.Helper()
@@ -85,6 +86,10 @@ func TestListPlatformEgress_ExcludesCircuitOpenNodes(t *testing.T) {
 
 	addNode("1.1.1.1", "1.1.1.1", false)
 	addNode("2.2.2.2", "2.2.2.2", true)
+
+	// The list is served from the platform's routable view, so build it the same
+	// way the runtime does after nodes change.
+	pool.RebuildPlatform(plat)
 
 	cp := &ControlPlaneService{Engine: engine, Pool: pool, SubMgr: subMgr}
 	rows, err := cp.ListPlatformEgress(platform.DefaultPlatformID)

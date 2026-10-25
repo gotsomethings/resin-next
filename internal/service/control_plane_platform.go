@@ -1023,19 +1023,15 @@ type ipAgg struct {
 	total   int
 }
 
-// ListPlatformEgress returns the platform IP list: every egress IP whose nodes
-// are healthy (outbound ready, circuit closed) and pass the platform's static
-// configuration filters (subscription, tags, region, node age, egress
-// version/country, ASN, IP type, manual IP allow/deny), joined with the verdict
-// ledger.
+// ListPlatformEgress returns the platform IP list: the platform's own IP pool
+// (Resin's routable view — nodes that passed the platform configuration,
+// including the advanced filter dimensions, and are healthy), joined with the
+// verdict ledger.
 //
-// Circuit-open nodes are excluded: Resin has already decided the node is
-// unusable, so its IP is not part of the platform's IP library.
-//
-// The verdict blacklist and the probe-rate/age dimensions deliberately do not
-// filter the list: a blacklisted IP stays visible with its state until Resin
-// itself marks its nodes unhealthy, and untested IPs must stay visible so the
-// platform probe can accumulate samples.
+// The list never re-filters the global pool with its own rules: circuit-open or
+// otherwise ineligible nodes are simply not in the view. The verdict blacklist
+// and the probe-rate/age dimensions do not filter the list, so a blacklisted IP
+// stays visible with its state until Resin itself drops its node from the view.
 func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformEgressIPResponse, error) {
 	if _, err := s.getPlatformModel(platformID); err != nil {
 		return nil, err
@@ -1048,18 +1044,19 @@ func (s *ControlPlaneService) ListPlatformEgress(platformID string) ([]PlatformE
 	if s.Pool != nil {
 		if rt, ok := s.Pool.GetPlatform(platformID); ok && rt != nil {
 			window = rt.Policy.MinProbeSuccessRateWindow
-			subLookup := s.Pool.MakeSubLookup()
 			geo := s.geoLookup()
 			asn := s.asnLookupFunc()
-			s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+			// The list is the platform's own IP pool: Resin's routable view already
+			// holds the nodes that passed the platform configuration (including the
+			// advanced filter dimensions) and are healthy. We only join probe state
+			// on top instead of re-filtering the whole pool with our own rules.
+			rt.View().Range(func(h node.Hash) bool {
+				entry, ok := s.Pool.GetEntry(h)
+				if !ok {
+					return true
+				}
 				ip := entry.GetEgressIP()
-				if !ip.IsValid() || entry.IsDisabledBySubscriptions(subLookup) {
-					return true
-				}
-				if !entry.IsHealthy() {
-					return true
-				}
-				if !rt.MatchesConfigFilters(entry, subLookup, geo) {
+				if !ip.IsValid() {
 					return true
 				}
 				key := ip.Unmap().String()
