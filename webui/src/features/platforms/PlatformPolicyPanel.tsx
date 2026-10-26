@@ -9,7 +9,7 @@ import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { listPlatformEgress, setPlatformEgressBlacklist, updatePlatform } from "./api";
 import { getGeoIPStatus } from "../geoip/api";
-import type { EgressIPRow, Platform, PlatformExtras, PlatformUpdateInput } from "./types";
+import type { EgressIPPage, EgressIPRow, Platform, PlatformExtras, PlatformUpdateInput } from "./types";
 
 type Props = { platform: Platform };
 
@@ -390,13 +390,35 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const blacklistMutation = useMutation({
     mutationFn: (vars: { ip: string; blacklisted: boolean }) =>
       setPlatformEgressBlacklist(platform.id, vars.ip, vars.blacklisted),
-    onSuccess: () => {
-      setNotice("");
+    onMutate: async (vars) => {
+      const key = ["platform-egress", platform.id];
+      await queryClient.cancelQueries({ queryKey: key });
+      const prev = queryClient.getQueryData<EgressIPPage>(key);
+      if (prev) {
+        queryClient.setQueryData<EgressIPPage>(key, {
+          ...prev,
+          items: prev.items.map((row) =>
+            row.ip === vars.ip
+              ? {
+                  ...row,
+                  manual_blacklist: vars.blacklisted,
+                  state: vars.blacklisted ? "blacklisted" : row.last_probe_at ? "normal" : "unknown",
+                }
+              : row,
+          ),
+        });
+      }
+      return { prev };
+    },
+    onError: (error, _vars, ctx) => {
+      if (ctx && ctx.prev) {
+        queryClient.setQueryData(["platform-egress", platform.id], ctx.prev);
+      }
+      setNotice(formatApiErrorMessage(error, t));
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-egress", platform.id] });
       void queryClient.invalidateQueries({ queryKey: ["platform", platform.id] });
-    },
-    onError: (error) => {
-      setNotice(formatApiErrorMessage(error, t));
     },
   });
 
@@ -1073,7 +1095,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
                       <td>
                         <BlacklistToggle
                           on={blacklisted}
-                          disabled={blacklistMutation.isPending}
                           onToggle={(next) => blacklistMutation.mutate({ ip: row.ip, blacklisted: next })}
                         />
                       </td>
