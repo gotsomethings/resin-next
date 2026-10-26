@@ -144,14 +144,18 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 	}
 
 	byIP := make(map[string]probeCandidate)
+	var scanned, healthy, matched int
 	p.cfg.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
+		scanned++
 		ip := entry.GetEgressIP()
 		if !ip.IsValid() || !entry.IsHealthy() {
 			return true
 		}
+		healthy++
 		if t.Matches != nil && !t.Matches(entry) {
 			return true
 		}
+		matched++
 		key := ip.String()
 		if _, exists := byIP[key]; exists {
 			return true
@@ -178,6 +182,8 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 	})
 
 	if len(byIP) == 0 {
+		log.Printf("platform probe %s: no due candidates (nodes=%d healthy=%d matched=%d)",
+			t.ID, scanned, healthy, matched)
 		return
 	}
 

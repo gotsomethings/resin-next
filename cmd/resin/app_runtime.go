@@ -504,6 +504,29 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 	a.platformProbe = platformProbe
 	log.Println("Platform probe started")
 
+	// Prune ledger rows for IPs that left the pool. A deleted subscription must not
+	// leave a stale blacklist behind that a re-added subscription would inherit: a
+	// vanished IP keeps its row for a short grace window only.
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			present := make(map[string]struct{})
+			a.topoRuntime.pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+				if ip := entry.GetEgressIP(); ip.IsValid() {
+					present[ip.Unmap().String()] = struct{}{}
+				}
+				return true
+			})
+			if _, err := verdictStore.GC(time.Now().Add(-5*time.Minute), func(_, ip string) bool {
+				_, ok := present[ip]
+				return ok
+			}); err != nil {
+				log.Printf("verdict prune: %v", err)
+			}
+		}
+	}()
+
 	governor := probe.NewGovernor(probe.GovernorConfig{
 		Manager: a.topoRuntime.probeMgr,
 		OnAdjust: func(effective int, reason string, at time.Time) {
