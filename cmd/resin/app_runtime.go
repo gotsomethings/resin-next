@@ -514,13 +514,11 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 	a.platformProbe = platformProbe
 	log.Println("Platform probe started")
 
-	// Drop ledger rows for IPs that leave the pool. A deleted subscription must not
-	// leave a stale blacklist behind that a re-added subscription would inherit, so
-	// the transition present -> absent clears the IP's ledger almost immediately.
+	// Prune ledger rows for IPs that left the pool: an IP absent for more than the
+	// grace window is dropped so a re-added source does not inherit an old verdict.
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
-		prev := make(map[string]struct{})
 		for range ticker.C {
 			present := make(map[string]struct{})
 			a.topoRuntime.pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
@@ -529,14 +527,12 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 				}
 				return true
 			})
-			for ip := range prev {
-				if _, ok := present[ip]; !ok {
-					if n := verdictStore.DeleteIP(ip); n > 0 {
-						log.Printf("verdict: dropped ledger for %s (left the pool)", ip)
-					}
-				}
+			if _, err := verdictStore.GC(time.Now().Add(-5*time.Minute), func(_, ip string) bool {
+				_, ok := present[ip]
+				return ok
+			}); err != nil {
+				log.Printf("verdict prune: %v", err)
 			}
-			prev = present
 		}
 	}()
 
