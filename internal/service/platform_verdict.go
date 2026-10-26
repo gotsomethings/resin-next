@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log"
 	"net/netip"
 	"sync"
 	"time"
@@ -161,7 +162,9 @@ func (v *VerdictStore) Record(
 	v.mu.Unlock()
 
 	if v.repo != nil {
-		_ = v.repo.UpsertPlatformEgressIP(snapshot)
+		if err := v.repo.UpsertPlatformEgressIP(snapshot); err != nil {
+			log.Printf("verdict: persist %s/%s failed: %v", platformID, ip, err)
+		}
 	}
 	if becameBlacklisted && onBlacklist != nil {
 		onBlacklist(platformID, ip)

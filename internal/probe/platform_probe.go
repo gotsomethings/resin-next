@@ -3,11 +3,13 @@ package probe
 import (
 	"context"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Resinat/Resin/internal/node"
@@ -181,7 +183,15 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 
 	sem := make(chan struct{}, p.cfg.Concurrency)
 	var wg sync.WaitGroup
+	var passCount, failCount atomic.Int64
 	count := 0
+	started := time.Now()
+	hardTimeout := 30 * time.Second
+	if p.cfg.Timeout != nil {
+		if d := p.cfg.Timeout(); d > 0 {
+			hardTimeout = 2 * d
+		}
+	}
 	for _, c := range byIP {
 		if count >= p.cfg.MaxPerSweep {
 			break
@@ -192,18 +202,43 @@ func (p *PlatformProbe) sweep(t PlatformTarget) {
 		go func(c probeCandidate) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			pass, latency, statusCode := p.probeOne(t, c.hash)
+			// One probe must never freeze the whole sweep: an outbound whose dial
+			// ignores the request context would otherwise block every later round.
+			type outcome struct {
+				pass       bool
+				latency    time.Duration
+				statusCode int
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				pass, latency, statusCode := p.probeOne(t, c.hash)
+				done <- outcome{pass: pass, latency: latency, statusCode: statusCode}
+			}()
+			var res outcome
+			select {
+			case res = <-done:
+			case <-time.After(hardTimeout):
+				log.Printf("platform probe %s: %s timed out after %s", t.ID, c.ip, hardTimeout)
+				res = outcome{pass: false}
+			}
 			now := time.Now()
+			if res.pass {
+				passCount.Add(1)
+			} else {
+				failCount.Add(1)
+			}
 			// The probe belongs to the EGRESS IP, not to one node: every node behind
 			// that IP shares the result, so node-level filters stay meaningful.
-			p.recordIPProbeResult(c.ip, pass, latency, now)
-			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), pass, statusCode, now, t.Verdict)
+			p.recordIPProbeResult(c.ip, res.pass, res.latency, now)
+			black, rehabbed := p.cfg.Verdict.Record(t.ID, c.ip.String(), c.hash.Hex(), res.pass, res.statusCode, now, t.Verdict)
 			if (black || rehabbed) && p.cfg.OnVerdictChange != nil {
 				p.cfg.OnVerdictChange(t.ID)
 			}
 		}(c)
 	}
 	wg.Wait()
+	log.Printf("platform probe %s: candidates=%d pass=%d fail=%d elapsed=%s",
+		t.ID, count, passCount.Load(), failCount.Load(), time.Since(started))
 }
 
 func (p *PlatformProbe) probeOne(t PlatformTarget, hash node.Hash) (bool, time.Duration, int) {
