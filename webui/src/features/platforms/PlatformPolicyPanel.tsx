@@ -252,53 +252,6 @@ function countryLabel(code: string | undefined, locale: string): string {
   return up;
 }
 
-// Manual blacklist toggle: off = neutral track with the knob left, on = the
-// knob slides right over a red track.
-function BlacklistToggle({
-  on,
-  disabled,
-  onToggle,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      disabled={disabled}
-      onClick={() => onToggle(!on)}
-      style={{
-        position: "relative",
-        width: 44,
-        height: 24,
-        padding: 0,
-        border: "none",
-        borderRadius: 12,
-        cursor: disabled ? "not-allowed" : "pointer",
-        background: on ? "var(--danger)" : "var(--border)",
-        transition: "background 0.18s ease",
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 3,
-          left: on ? 23 : 3,
-          width: 18,
-          height: 18,
-          borderRadius: "50%",
-          background: "#fff",
-          transition: "left 0.18s ease",
-        }}
-      />
-    </button>
-  );
-}
-
 export function PlatformPolicyPanel({ platform }: Props) {
   const { t, locale } = useI18n();
   const queryClient = useQueryClient();
@@ -1093,10 +1046,25 @@ export function PlatformPolicyPanel({ platform }: Props) {
                       </td>
                       <td>{formatRate(row.success_rate)}</td>
                       <td>
-                        <BlacklistToggle
-                          on={blacklisted}
-                          onToggle={(next) => blacklistMutation.mutate({ ip: row.ip, blacklisted: next })}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => blacklistMutation.mutate({ ip: row.ip, blacklisted: !blacklisted })}
+                          title={blacklisted ? t("解除该 IP 的手动拉黑") : t("手动拉黑该 IP")}
+                          style={{
+                            height: 26,
+                            padding: "0 10px",
+                            fontSize: 12,
+                            lineHeight: "26px",
+                            borderRadius: 6,
+                            border: "1px solid " + (blacklisted ? "var(--danger)" : "var(--border)"),
+                            background: blacklisted ? "var(--danger)" : "transparent",
+                            color: blacklisted ? "#fff" : "inherit",
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {blacklisted ? t("解除拉黑") : t("拉黑")}
+                        </button>
                       </td>
                     </tr>
                   );
