@@ -519,6 +519,7 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
+		log.Println("Verdict ledger pruner started (tick=2m, grace=5m)")
 		for range ticker.C {
 			present := make(map[string]struct{})
 			a.topoRuntime.pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
@@ -527,11 +528,13 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 				}
 				return true
 			})
-			if _, err := verdictStore.GC(time.Now().Add(-5*time.Minute), func(_, ip string) bool {
+			if n, err := verdictStore.GC(time.Now().Add(-5*time.Minute), func(_, ip string) bool {
 				_, ok := present[ip]
 				return ok
 			}); err != nil {
 				log.Printf("verdict prune: %v", err)
+			} else if n > 0 {
+				log.Printf("verdict prune: removed %d ledger row(s) for IPs absent > 5m", n)
 			}
 		}
 	}()
