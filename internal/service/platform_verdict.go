@@ -253,6 +253,37 @@ func (v *VerdictStore) Snapshot(platformID string) []model.PlatformEgressIP {
 	return out
 }
 
+// DeleteIP removes every ledger row for one egress IP across all platforms. It is
+// used when the IP leaves the pool (e.g. its source was deleted) so that a later
+// re-added source starts from a clean "untested" state instead of inheriting an
+// old blacklist.
+func (v *VerdictStore) DeleteIP(ip string) int {
+	if v == nil || ip == "" {
+		return 0
+	}
+	var pids []string
+	v.mu.Lock()
+	for pid, m := range v.byPlatform {
+		if _, ok := m[ip]; ok {
+			delete(m, ip)
+			pids = append(pids, pid)
+			if len(m) == 0 {
+				delete(v.byPlatform, pid)
+			}
+		}
+	}
+	v.mu.Unlock()
+
+	for _, pid := range pids {
+		if v.repo != nil {
+			if err := v.repo.DeletePlatformEgressIP(pid, ip); err != nil {
+				log.Printf("verdict: delete %s/%s failed: %v", pid, ip, err)
+			}
+		}
+	}
+	return len(pids)
+}
+
 // GC removes ledger rows whose egress IP has not been seen for the retention
 // window and is no longer present on any node. live reports current presence.
 func (v *VerdictStore) GC(cutoff time.Time, live func(platformID, ip string) bool) (int64, error) {
