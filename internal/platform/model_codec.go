@@ -207,7 +207,7 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		)
 	}
 
-	return NewConfiguredPlatformWithPolicy(
+	plat := NewConfiguredPlatformWithPolicy(
 		mp.ID,
 		mp.Name,
 		regexFilters,
@@ -220,7 +220,14 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		mp.AllocationPolicy,
 		mp.PassiveCircuitBreakerDisabled,
 		mp.AdvancedEnabled,
-	), nil
+	)
+	// Probe/verdict/failover must be restored here as well: the platform probe
+	// reads Platform.Probe, and a zero value silently disables all platform
+	// probing until the platform is next saved from the UI.
+	plat.Probe = ProbeFromModel(mp)
+	plat.Verdict = VerdictFromModel(mp)
+	plat.Failover = FailoverFromModel(mp)
+	return plat, nil
 }
 
 // ProbeFromModel extracts the probe configuration with defaults applied.

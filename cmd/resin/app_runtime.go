@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -470,6 +471,15 @@ func (a *resinApp) buildNetworkServers(engine *state.StateEngine) error {
 			log.Printf("verdict: %s rehabilitated %s", platformID, ip)
 		},
 	)
+
+	// The blacklist lookup also has to be reattached on boot: platforms built from
+	// the database carry no closure, so without this a restart silently disables
+	// blacklist enforcement until the platform is saved again.
+	a.topoRuntime.pool.RangePlatforms(func(pl *platform.Platform) bool {
+		pid := pl.ID
+		pl.BlacklistLookup = func(ip netip.Addr) bool { return verdictStore.IsBlacklisted(pid, ip) }
+		return true
+	})
 
 	platformProbe := probe.NewPlatformProbe(probe.PlatformProbeConfig{
 		Pool:   a.topoRuntime.pool,
