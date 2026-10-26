@@ -734,6 +734,9 @@ func loadBootstrapNodeStatics(
 		// nodes_dynamic row later overrides this state.
 		entry.CircuitOpenSince.Store(bootstrapNowNs)
 		entry.LatencyTable = node.NewLatencyTable(envCfg.MaxLatencyTableEntries)
+		// Rebuilt entries must own their probe rings, otherwise every probe
+		// sample is dropped and the IP list can never show a success rate.
+		entry.InitProbeWindow()
 		pool.LoadNodeFromBootstrap(entry)
 		hashes = append(hashes, hash)
 	}

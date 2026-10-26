@@ -69,6 +69,21 @@ type NodeEntry struct {
 	Outbound atomic.Pointer[adapter.Outbound]
 }
 
+// InitProbeWindow ensures the probe-sample ring and the P95 ring exist. Entries
+// rebuilt from persisted state (bootstrap) bypass NewNodeEntry, and without this
+// every probe sample is silently dropped, so the success-rate column stays empty.
+func (e *NodeEntry) InitProbeWindow() {
+	if e == nil {
+		return
+	}
+	if e.ProbeWindow == nil {
+		e.ProbeWindow = NewSlidingWindow(DefaultProbeWindowSize)
+	}
+	if e.p95Samples == nil {
+		e.p95Samples = NewLatencyRing(DefaultP95SampleSize)
+	}
+}
+
 // NewNodeEntry creates a NodeEntry with the given static fields.
 // maxLatencyTableEntries controls the bounded size of the regular-domain LRU
 // partition in the per-domain latency table.
