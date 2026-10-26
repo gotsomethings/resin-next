@@ -127,7 +127,7 @@ func (r *StateRepo) SaveSystemConfig(cfg *config.RuntimeConfig, version int, upd
 const platformColumns = `id, name, sticky_ttl_ns, regex_filters_json, region_filters_json,
 	reverse_proxy_miss_action, reverse_proxy_empty_account_behavior,
 	reverse_proxy_fixed_account_header, allocation_policy,
-	passive_circuit_breaker_disabled, updated_at_ns,
+	passive_circuit_breaker_disabled, advanced_enabled, updated_at_ns,
 	latency_top_n, latency_max_ms, latency_p95_max_ms, min_alive_streak,
 	min_probe_success_rate, probe_rate_window_ns, max_last_probe_age_ns, min_node_age_ns,
 	egress_ip_version, egress_country_filters_json, asn_filters_json,
@@ -144,11 +144,11 @@ func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform
 	var countryFiltersJSON, asnFiltersJSON, ipTypeFiltersJSON, ipFiltersJSON string
 	var passStatusJSON string
 	var probeEnabled, probeFollowRedirects, verdictEnabled, rehabEnabled, failoverEnabled int
-	var passiveCircuitBreakerDisabled int
+	var passiveCircuitBreakerDisabled, advancedEnabled int
 	if err := scanner.Scan(
 		&p.ID, &p.Name, &p.StickyTTLNs, &regexFiltersJSON, &regionFiltersJSON,
 		&p.ReverseProxyMissAction, &p.ReverseProxyEmptyAccountBehavior,
-		&p.ReverseProxyFixedAccountHeader, &p.AllocationPolicy, &passiveCircuitBreakerDisabled, &p.UpdatedAtNs,
+		&p.ReverseProxyFixedAccountHeader, &p.AllocationPolicy, &passiveCircuitBreakerDisabled, &advancedEnabled, &p.UpdatedAtNs,
 		&p.LatencyTopN, &p.LatencyMaxMs, &p.LatencyP95MaxMs, &p.MinAliveStreak,
 		&p.MinProbeSuccessRate, &p.ProbeRateWindowNs, &p.MaxLastProbeAgeNs, &p.MinNodeAgeNs,
 		&p.EgressIPVersion, &countryFiltersJSON, &asnFiltersJSON,
@@ -161,6 +161,7 @@ func scanPlatform(scanner interface{ Scan(dest ...any) error }) (*model.Platform
 		return nil, err
 	}
 	p.PassiveCircuitBreakerDisabled = passiveCircuitBreakerDisabled != 0
+	p.AdvancedEnabled = advancedEnabled != 0
 	p.ProbeEnabled = probeEnabled != 0
 	p.ProbeFollowRedirects = probeFollowRedirects != 0
 	p.VerdictEnabled = verdictEnabled != 0
@@ -272,7 +273,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		INSERT INTO platforms (id, name, sticky_ttl_ns, regex_filters_json, region_filters_json,
 		                       reverse_proxy_miss_action, reverse_proxy_empty_account_behavior,
 		                       reverse_proxy_fixed_account_header, allocation_policy,
-		                       passive_circuit_breaker_disabled, updated_at_ns,
+		                       passive_circuit_breaker_disabled, advanced_enabled, updated_at_ns,
 		                       latency_top_n, latency_max_ms, latency_p95_max_ms, min_alive_streak,
 		                       min_probe_success_rate, probe_rate_window_ns, max_last_probe_age_ns, min_node_age_ns,
 		                       egress_ip_version, egress_country_filters_json, asn_filters_json,
@@ -281,7 +282,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		                       probe_pass_status_json, probe_follow_redirects, probe_interval_ns, probe_scope,
 		                       verdict_enabled, rehab_enabled, blacklist_threshold, rehab_interval_ns, rehab_success_threshold,
 	                       failover_enabled, failover_max_switches, failover_deadline_ns, failover_stage)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name                     = excluded.name,
 			sticky_ttl_ns            = excluded.sticky_ttl_ns,
@@ -292,6 +293,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 			reverse_proxy_fixed_account_header   = excluded.reverse_proxy_fixed_account_header,
 			allocation_policy        = excluded.allocation_policy,
 			passive_circuit_breaker_disabled = excluded.passive_circuit_breaker_disabled,
+			advanced_enabled         = excluded.advanced_enabled,
 			updated_at_ns            = excluded.updated_at_ns,
 			latency_top_n            = excluded.latency_top_n,
 			latency_max_ms           = excluded.latency_max_ms,
@@ -326,7 +328,7 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 			failover_stage           = excluded.failover_stage
 	`, p.ID, p.Name, p.StickyTTLNs, regexFiltersJSON, regionFiltersJSON,
 		p.ReverseProxyMissAction, p.ReverseProxyEmptyAccountBehavior, p.ReverseProxyFixedAccountHeader,
-		p.AllocationPolicy, p.PassiveCircuitBreakerDisabled, p.UpdatedAtNs,
+		p.AllocationPolicy, p.PassiveCircuitBreakerDisabled, boolToInt(p.AdvancedEnabled), p.UpdatedAtNs,
 		p.LatencyTopN, p.LatencyMaxMs, p.LatencyP95MaxMs, p.MinAliveStreak,
 		p.MinProbeSuccessRate, p.ProbeRateWindowNs, p.MaxLastProbeAgeNs, p.MinNodeAgeNs,
 		p.EgressIPVersion, countryFiltersJSON, asnFiltersJSON,

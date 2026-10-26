@@ -32,6 +32,9 @@ type Platform struct {
 	IPTypeFilters        []string
 	EgressIPFilters      []string
 
+	// --- Advanced master switch ---
+	AdvancedEnabled bool `json:"advanced_enabled"`
+
 	// --- Platform probe + verdict (P2) ---
 	ProbeEnabled          bool   `json:"probe_enabled"`
 	ProbeURL              string `json:"probe_url"`

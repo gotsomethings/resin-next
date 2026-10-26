@@ -14,6 +14,7 @@ export type Platform = {
   reverse_proxy_fixed_account_header: string;
   allocation_policy: PlatformAllocationPolicy;
   passive_circuit_breaker_disabled: boolean;
+  advanced_enabled: boolean;
   updated_at: string;
 };
 
@@ -79,6 +80,7 @@ export type PlatformCreateInput = {
   reverse_proxy_fixed_account_header?: string;
   allocation_policy?: PlatformAllocationPolicy;
   passive_circuit_breaker_disabled?: boolean;
+  advanced_enabled?: boolean;
 };
 
 export type PlatformUpdateInput = {

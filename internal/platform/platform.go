@@ -138,6 +138,10 @@ type Platform struct {
 	ID   string
 	Name string
 
+	// AdvancedEnabled is the master switch for the advanced filter surface.
+	// When false the platform routes on its base configuration only.
+	AdvancedEnabled bool
+
 	// Filter configuration.
 	RegexFilters  node.TagFilter
 	RegionFilters []string // lowercase ISO codes, supports negation "!xx"
@@ -181,6 +185,9 @@ func NewPlatformWithTagFilter(id, name string, regexFilters node.TagFilter, regi
 		Name:          name,
 		RegexFilters:  regexFilters,
 		RegionFilters: regionFilters,
+		// Existing callers keep the historical behaviour: advanced filtering is on
+		// unless it is explicitly switched off.
+		AdvancedEnabled: true,
 		view:          NewRoutableView(),
 	}
 }
@@ -351,6 +358,32 @@ func (p *Platform) MatchesConfigFilters(
 	return true
 }
 
+// MatchesBaseConfig reports whether the node belongs to the platform's base
+// configuration: subscription enablement, tag rules, region filter and a known
+// egress IP. Advanced dimensions are deliberately excluded, so the platform card
+// can show what the platform itself provides before any advanced filtering.
+func (p *Platform) MatchesBaseConfig(
+	entry *node.NodeEntry,
+	subLookup node.SubLookupFunc,
+	geoLookup GeoLookupFunc,
+) bool {
+	if entry.IsDisabledBySubscriptions(subLookup) {
+		return false
+	}
+	if !entry.MatchTagFilter(p.RegexFilters, subLookup) {
+		return false
+	}
+	if !entry.GetEgressIP().IsValid() {
+		return false
+	}
+	if len(p.RegionFilters) > 0 {
+		if !MatchRegionFilter(entry.GetRegion(geoLookup), p.RegionFilters) {
+			return false
+		}
+	}
+	return true
+}
+
 // evaluateNode checks all filter conditions for platform routability.
 func (p *Platform) evaluateNode(
 	entry *node.NodeEntry,
@@ -379,6 +412,16 @@ func (p *Platform) evaluateNodeWith(
 	geoLookup GeoLookupFunc,
 	useBlacklist bool,
 ) bool {
+	// With the advanced master switch off the platform filters on its base
+	// configuration only: no policy dimensions, no probe verdict, no blacklist.
+	if !p.AdvancedEnabled {
+		return p.MatchesBaseConfig(entry, subLookup, geoLookup) && entry.IsHealthy()
+	}
+
+	if !p.AdvancedEnabled {
+		return p.MatchesBaseConfig(entry, subLookup, geoLookup) && entry.IsHealthy()
+	}
+
 	if !p.MatchesConfigFilters(entry, subLookup, geoLookup) {
 		return false
 	}
@@ -391,7 +434,9 @@ func (p *Platform) evaluateNodeWith(
 	// 2. Per-platform blacklist (verdict state machine). Skipped for the IP list,
 	// which reports blacklisted IPs with their state instead of hiding them.
 	egressIP := entry.GetEgressIP()
-	if useBlacklist && p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
+	// Advanced dimensions are gated by the master switch: with it off the platform
+	// filters on its base configuration only.
+	if useBlacklist && p.AdvancedEnabled && p.Verdict.Enabled && p.BlacklistLookup != nil && p.BlacklistLookup(egressIP) {
 		return false
 	}
 

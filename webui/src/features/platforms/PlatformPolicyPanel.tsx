@@ -14,6 +14,7 @@ import type { EgressIPRow, Platform, PlatformExtras, PlatformUpdateInput } from 
 type Props = { platform: Platform };
 
 type FormState = {
+  advanced_enabled: boolean;
   probe_enabled: boolean;
   probe_url: string;
   probe_method: string;
@@ -50,6 +51,7 @@ type FormState = {
 function toForm(platform: Platform): FormState {
   const p = platform as Platform & Partial<PlatformExtras>;
   return {
+    advanced_enabled: p.advanced_enabled ?? true,
     probe_enabled: p.probe_enabled ?? false,
     probe_url: p.probe_url ?? "",
     probe_method: p.probe_method ?? "POST",
@@ -309,9 +311,9 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const [egressType, setEgressType] = useState<"all" | "residential" | "hosting" | "mobile" | "unknown">("all");
   const [egressKeyword, setEgressKeyword] = useState("");
   const [egressCountry, setEgressCountry] = useState("");
-  const [egressSort, setEgressSort] = useState<"failure_desc" | "failure_asc" | "probe_desc" | "probe_asc" | "ip_asc">(
-    "ip_asc",
-  );
+  const [egressSort, setEgressSort] = useState<
+    "joined_desc" | "joined_asc" | "failure_desc" | "failure_asc" | "probe_desc" | "probe_asc"
+  >("joined_desc");
 
   useEffect(() => {
     setForm(toForm(platform));
@@ -459,6 +461,27 @@ export function PlatformPolicyPanel({ platform }: Props) {
     return out;
   };
   const allEgressRows: EgressIPRow[] = egressQuery.data?.items ?? [];
+  const egressStats = allEgressRows.reduce(
+    (acc, row) => {
+      const n = row.node_count || 0;
+      switch (row.state || "unknown") {
+        case "normal":
+          acc.ok += n;
+          break;
+        case "failed":
+          acc.failed += n;
+          break;
+        case "blacklisted":
+          acc.blacklisted += n;
+          break;
+        default:
+          acc.untested += n;
+          break;
+      }
+      return acc;
+    },
+    { ok: 0, failed: 0, blacklisted: 0, untested: 0 },
+  );
   const visibleEgressRows = allEgressRows
     .filter((row) => egressState === "all" || (row.state || "unknown") === egressState)
     .filter((row) => egressType === "all" || (row.ip_type || "unknown") === egressType)
@@ -479,8 +502,10 @@ export function PlatformPolicyPanel({ platform }: Props) {
           return (a.last_probe_at || "").localeCompare(b.last_probe_at || "") || a.ip.localeCompare(b.ip);
         case "probe_desc":
           return (b.last_probe_at || "").localeCompare(a.last_probe_at || "") || a.ip.localeCompare(b.ip);
-        case "ip_asc":
-          return a.ip.localeCompare(b.ip);
+        case "joined_asc":
+          return (a.joined_at || "").localeCompare(b.joined_at || "") || a.ip.localeCompare(b.ip);
+        case "joined_desc":
+          return (b.joined_at || "").localeCompare(a.joined_at || "") || a.ip.localeCompare(b.ip);
         default:
           return b.failure_count - a.failure_count || a.ip.localeCompare(b.ip);
       }
@@ -491,6 +516,20 @@ export function PlatformPolicyPanel({ platform }: Props) {
       {notice ? (
         <p className="muted" style={{ marginTop: 0, fontSize: 12, lineHeight: 1.4 }}>{notice}</p>
       ) : null}
+
+      <section className="syscfg-section">
+        <h4>{t("高级配置")}</h4>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+          <Switch
+            checked={form.advanced_enabled}
+            onChange={(e) => setForm({ ...form, advanced_enabled: e.target.checked })}
+          />
+          <span>{t("开启高级配置")}</span>
+        </div>
+        <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>
+          {t("关闭后平台只按基础配置过滤，探测、判决与高级筛选维度均不生效")}
+        </p>
+      </section>
 
       <section className="syscfg-section">
         <h4>{t("探测配置")}</h4>
@@ -504,17 +543,6 @@ export function PlatformPolicyPanel({ platform }: Props) {
             marginTop: 16,
           }}
         >
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("应用探测")}</label>
-            <div style={{ display: "flex", alignItems: "center", height: 36 }}>
-              <Switch
-                checked={form.probe_enabled}
-                onChange={(e) => setForm({ ...form, probe_enabled: e.target.checked })}
-              />
-            </div>
-            <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("关闭时不产生任何探测样本")}</p>
-          </div>
-
           <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测方法")}</label>
             <Select
@@ -877,6 +905,14 @@ export function PlatformPolicyPanel({ platform }: Props) {
         <p className="muted">
           {t("仅列出通过高级规则过滤、当前有节点的出口 IP；带「使用中」标记的正在被租约使用。")}
         </p>
+        <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+          {t("当前高级模型下可用节点 {{ok}} 个，探测失败节点 {{failed}} 个，已拉黑节点 {{blacklisted}} 个，待测节点 {{untested}} 个", {
+            ok: egressStats.ok,
+            failed: egressStats.failed,
+            blacklisted: egressStats.blacklisted,
+            untested: egressStats.untested,
+          })}
+        </p>
 
         <div style={IP_FILTER_BAR_STYLE}>
           <div style={IP_FILTER_ITEM_STYLE}>
@@ -932,7 +968,8 @@ export function PlatformPolicyPanel({ platform }: Props) {
               onChange={(e) => setEgressSort(e.target.value as typeof egressSort)}
               style={IP_FILTER_CONTROL_STYLE}
             >
-              <option value="ip_asc">{t("IP 字典序")}</option>
+              <option value="joined_desc">{t("加入时间 ↓")}</option>
+              <option value="joined_asc">{t("加入时间 ↑")}</option>
               <option value="failure_desc">{t("连续失败 ↓")}</option>
               <option value="failure_asc">{t("连续失败 ↑")}</option>
               <option value="probe_desc">{t("最近探测时间 ↓")}</option>

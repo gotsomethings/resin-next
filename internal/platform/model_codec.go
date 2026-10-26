@@ -100,6 +100,7 @@ func NewConfiguredPlatformWithPolicy(
 	fixedAccountHeader string,
 	allocationPolicy string,
 	passiveCircuitBreakerDisabled bool,
+	advancedEnabled ...bool,
 ) *Platform {
 	normalizedFixedHeaders, fixedHeaders, err := NormalizeFixedAccountHeaders(fixedAccountHeader)
 	if err != nil {
@@ -107,6 +108,12 @@ func NewConfiguredPlatformWithPolicy(
 		fixedHeaders = nil
 	}
 	plat := NewPlatformWithTagFilter(id, name, regexFilters, regionFilters)
+	// Existing callers keep the historical behaviour: advanced filtering is on
+	// unless the caller explicitly says otherwise.
+	plat.AdvancedEnabled = true
+	if len(advancedEnabled) > 0 {
+		plat.AdvancedEnabled = advancedEnabled[0]
+	}
 	plat.Policy = policy
 	plat.StickyTTLNs = stickyTTLNs
 	plat.ReverseProxyMissAction = missAction
@@ -212,6 +219,7 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		fixedHeader,
 		mp.AllocationPolicy,
 		mp.PassiveCircuitBreakerDisabled,
+		mp.AdvancedEnabled,
 	), nil
 }
 

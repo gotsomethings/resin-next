@@ -52,6 +52,9 @@ type PlatformResponse struct {
 	IPTypeFilters        []string `json:"ip_type_filters"`
 	EgressIPFilters      []string `json:"egress_ip_filters"`
 
+	// Advanced filter surface master switch.
+	AdvancedEnabled bool `json:"advanced_enabled"`
+
 	// Probe / verdict surface (P2).
 	ProbeEnabled          bool   `json:"probe_enabled"`
 	ProbeURL              string `json:"probe_url"`
@@ -106,6 +109,7 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		IPTypeFilters:        append([]string(nil), p.IPTypeFilters...),
 		EgressIPFilters:      append([]string(nil), p.EgressIPFilters...),
 
+		AdvancedEnabled:       p.AdvancedEnabled,
 		ProbeEnabled:          p.ProbeEnabled,
 		ProbeURL:              p.ProbeURL,
 		ProbeMethod:           p.ProbeMethod,
@@ -136,7 +140,19 @@ func (s *ControlPlaneService) withRoutableNodeCount(resp PlatformResponse) Platf
 	if !ok || plat == nil {
 		return resp
 	}
-	resp.RoutableNodeCount = plat.View().Size()
+	// The card reports what the platform's own (base) configuration provides, not
+	// the advanced-filtered routable view: advanced rules are opt-in and must not
+	// make a platform look empty.
+	subLookup := s.Pool.MakeSubLookup()
+	geo := s.geoLookup()
+	count := 0
+	s.Pool.Range(func(_ node.Hash, entry *node.NodeEntry) bool {
+		if entry.IsHealthy() && plat.MatchesBaseConfig(entry, subLookup, geo) {
+			count++
+		}
+		return true
+	})
+	resp.RoutableNodeCount = count
 	return resp
 }
 
@@ -150,6 +166,7 @@ type platformConfig struct {
 	ReverseProxyFixedAccountHeader   string
 	AllocationPolicy                 string
 	PassiveCircuitBreakerDisabled    bool
+	AdvancedEnabled                  bool
 
 	// Policy surface (P1).
 	Policy platform.Policy
@@ -206,6 +223,7 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 		ReverseProxyFixedAccountHeader:   normalizeHeaderFieldName(mp.ReverseProxyFixedAccountHeader),
 		AllocationPolicy:                 mp.AllocationPolicy,
 		PassiveCircuitBreakerDisabled:    mp.PassiveCircuitBreakerDisabled,
+		AdvancedEnabled:                  mp.AdvancedEnabled,
 		Policy:                           platform.PolicyFromModel(mp),
 		Probe:                            platform.ProbeFromModel(mp),
 		Verdict:                          platform.VerdictFromModel(mp),
@@ -225,6 +243,7 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 		ReverseProxyFixedAccountHeader:   cfg.ReverseProxyFixedAccountHeader,
 		AllocationPolicy:                 cfg.AllocationPolicy,
 		PassiveCircuitBreakerDisabled:    cfg.PassiveCircuitBreakerDisabled,
+		AdvancedEnabled:                  cfg.AdvancedEnabled,
 		UpdatedAtNs:                      updatedAtNs,
 	}
 	platform.ApplyPolicyToModel(cfg.Policy, &mp)
@@ -250,6 +269,7 @@ func (cfg platformConfig) toRuntime(id string, asnLookup platform.ASNLookupFunc,
 		cfg.ReverseProxyFixedAccountHeader,
 		cfg.AllocationPolicy,
 		cfg.PassiveCircuitBreakerDisabled,
+		cfg.AdvancedEnabled,
 	)
 	plat.ASNLookup = asnLookup
 	plat.BlacklistLookup = blacklist
@@ -446,6 +466,7 @@ type CreatePlatformRequest struct {
 	ReverseProxyFixedAccountHeader   *string  `json:"reverse_proxy_fixed_account_header"`
 	AllocationPolicy                 *string  `json:"allocation_policy"`
 	PassiveCircuitBreakerDisabled    *bool    `json:"passive_circuit_breaker_disabled"`
+	AdvancedEnabled                  *bool    `json:"advanced_enabled"`
 
 	LatencyTopN          *int     `json:"latency_top_n"`
 	LatencyMaxMs         *int     `json:"latency_max_ms"`
@@ -536,6 +557,9 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 	}
 	if req.PassiveCircuitBreakerDisabled != nil {
 		cfg.PassiveCircuitBreakerDisabled = *req.PassiveCircuitBreakerDisabled
+	}
+	if req.AdvancedEnabled != nil {
+		cfg.AdvancedEnabled = *req.AdvancedEnabled
 	}
 	if svcErr := applyPolicyPatch(&cfg.Policy, policyPatchFromCreate(req)); svcErr != nil {
 		return nil, svcErr
@@ -660,6 +684,11 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 		return nil, err
 	} else if ok {
 		cfg.PassiveCircuitBreakerDisabled = disabled
+	}
+	if advanced, ok, err := patch.optionalBool("advanced_enabled"); err != nil {
+		return nil, err
+	} else if ok {
+		cfg.AdvancedEnabled = advanced
 	}
 	policyPatch, svcErr := policyPatchFromMerge(patch)
 	if svcErr != nil {

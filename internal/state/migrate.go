@@ -36,7 +36,8 @@ const (
 	stateVersionPlatformProbeRateWindow          = 15
 	stateVersionPlatformEgressStatus             = 16
 	stateVersionPlatformDropEgressIPFilter       = 17
-	stateLatestVersion                           = stateVersionPlatformDropEgressIPFilter
+	stateVersionPlatformAdvancedSwitch           = 18
+	stateLatestVersion                           = stateVersionPlatformAdvancedSwitch
 	stateLegacyBaselineVersion                   = stateVersionAddFixedAccountHeader
 
 	stateBaseSchemaMigration = stateMigrationsPath + "/000001_state_base.up.sql"
