@@ -297,6 +297,14 @@ func (r *Router) tryLeaseSameIPRotation(
 	newLease := current
 	newLease.NodeHash = bestHash
 	newLease.LastAccessedNs = nowNs
+	// Rebuilding on the same egress IP is still a new lease: renew the expiry so the
+	// account gets a full sticky TTL on the replacement node instead of inheriting
+	// the remainder of the previous lease.
+	ttl := plat.StickyTTLNs
+	if ttl <= 0 {
+		ttl = int64(24 * time.Hour)
+	}
+	newLease.ExpiryNs = time.Unix(0, nowNs).Add(time.Duration(ttl)).UnixNano()
 	r.emitLeaseEvent(LeaseEvent{
 		Type:       LeaseReplace,
 		PlatformID: plat.ID,
