@@ -463,19 +463,18 @@ export function PlatformPolicyPanel({ platform }: Props) {
   const allEgressRows: EgressIPRow[] = egressQuery.data?.items ?? [];
   const egressStats = allEgressRows.reduce(
     (acc, row) => {
-      const n = row.node_count || 0;
       switch (row.state || "unknown") {
         case "normal":
-          acc.ok += n;
+          acc.ok += 1;
           break;
         case "failed":
-          acc.failed += n;
+          acc.failed += 1;
           break;
         case "blacklisted":
-          acc.blacklisted += n;
+          acc.blacklisted += 1;
           break;
         default:
-          acc.untested += n;
+          acc.untested += 1;
           break;
       }
       return acc;
@@ -556,7 +555,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("默认 POST")}</p>
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div>
             <label className="field-label" style={{ display: "block", marginBottom: 6 }}>{t("探测 URL")}</label>
             <Input value={form.probe_url} onChange={(e) => setForm({ ...form, probe_url: e.target.value })} />
             <p className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.4 }}>{t("任意 URL，示例为 opencode 匿名请求地址")}</p>
@@ -906,7 +905,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
           {t("仅列出通过高级规则过滤、当前有节点的出口 IP；带「使用中」标记的正在被租约使用。")}
         </p>
         <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-          {t("当前高级模型下可用节点 {{ok}} 个，探测失败节点 {{failed}} 个，已拉黑节点 {{blacklisted}} 个，待测节点 {{untested}} 个", {
+          {t("高级模式下可用IP {{ok}} 个，探测失败IP {{failed}} 个，已拉黑IP {{blacklisted}} 个，待测IP {{untested}} 个", {
             ok: egressStats.ok,
             failed: egressStats.failed,
             blacklisted: egressStats.blacklisted,
@@ -1033,7 +1032,7 @@ export function PlatformPolicyPanel({ platform }: Props) {
                   const blacklisted = row.state === "blacklisted" || Boolean(row.manual_blacklist);
                   return (
                     <tr key={row.ip}>
-                      <td style={{ width: 128, maxWidth: 128 }}>
+                      <td style={{ width: 160, maxWidth: 160 }}>
                         <div
                           style={{
                             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",

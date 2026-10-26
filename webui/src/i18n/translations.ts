@@ -751,8 +751,8 @@ Note: Once enabled, requests without authentication information are rejected ins
   "{{count}} 个可用节点": "{{count}} available nodes",
   "加入时间 ↓": "Joined ↓",
   "加入时间 ↑": "Joined ↑",
-  "当前高级模型下可用节点 {{ok}} 个，探测失败节点 {{failed}} 个，已拉黑节点 {{blacklisted}} 个，待测节点 {{untested}} 个":
-    "Advanced model: {{ok}} available, {{failed}} failed, {{blacklisted}} blacklisted, {{untested}} untested",
+  "高级模式下可用IP {{ok}} 个，探测失败IP {{failed}} 个，已拉黑IP {{blacklisted}} 个，待测IP {{untested}} 个":
+    "Advanced model: {{ok}} available IPs, {{failed}} failed, {{blacklisted}} blacklisted, {{untested}} untested",
   "{{count}} 项待提交": "{{count}} pending changes",
   "{{field}} 不能为空": "{{field}} cannot be empty",
   "{{field}} 必须是非负整数": "{{field}} must be a non-negative integer",
