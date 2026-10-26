@@ -178,7 +178,7 @@ export async function clearAllPlatformLeases(id: string): Promise<void> {
 export async function setPlatformEgressBlacklist(id: string, ip: string, blacklisted: boolean): Promise<void> {
   await apiRequest<void>(`${basePath}/${id}/egress/blacklist`, {
     method: "POST",
-    body: JSON.stringify({ ip, blacklisted }),
+    body: { ip, blacklisted },
   });
 }
 
