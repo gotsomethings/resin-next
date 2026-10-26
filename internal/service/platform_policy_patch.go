@@ -185,9 +185,11 @@ func applyPolicyPatch(dst *platform.Policy, p policyPatch) *ServiceError {
 	if p.hasIPTypeFilters {
 		dst.IPTypeFilters = append([]string(nil), p.ipTypeFilters...)
 	}
-	if p.hasEgressIPFilters {
-		dst.EgressIPFilters = append([]string(nil), p.egressIPFilters...)
-	}
+	// egress_ip_filters was removed as a feature (and its UI). The input is still
+	// accepted for API compatibility but deliberately ignored so no client can
+	// re-arm a filter that empties the platform.
+	_ = p.hasEgressIPFilters
+	dst.EgressIPFilters = nil
 	return nil
 }
 

@@ -91,9 +91,8 @@ func Validate(p Policy) error {
 	if err := ValidateIPTypeFilters(p.IPTypeFilters); err != nil {
 		return err
 	}
-	if err := ValidateEgressIPFilters(p.EgressIPFilters); err != nil {
-		return err
-	}
+	// EgressIPFilters (manual IP allow/deny) was removed as a feature; the field is
+	// kept for schema compatibility only and is no longer validated or applied.
 	return nil
 }
 
@@ -346,10 +345,8 @@ func (p *Platform) MatchesConfigFilters(
 		}
 	}
 
-	// Manual egress IP allow/deny.
-	if !MatchEgressIPFilter(egressIP, pol.EgressIPFilters) {
-		return false
-	}
+	// Manual egress IP allow/deny was removed; the stored column is kept for schema
+	// compatibility but no longer participates in matching.
 
 	return true
 }
@@ -485,10 +482,7 @@ func (p *Platform) evaluateNodeWith(
 		}
 	}
 
-	// 16. Manual egress IP allow/deny.
-	if !MatchEgressIPFilter(egressIP, pol.EgressIPFilters) {
-		return false
-	}
+	// 16. Manual egress IP allow/deny was removed; it no longer filters nodes.
 
 	return true
 }
