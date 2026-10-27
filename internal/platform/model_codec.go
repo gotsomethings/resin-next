@@ -324,3 +324,38 @@ func ApplyProbeToModel(probe ProbeConfig, verdict VerdictConfig, mp *model.Platf
 	mp.RehabIntervalNs = int64(verdict.RehabInterval)
 	mp.RehabSuccessThreshold = verdict.RehabSuccessThreshold
 }
+
+// DefaultProbeURL is the probe target a newly created platform starts with.
+const DefaultProbeURL = "https://www.gstatic.com/generate_204"
+
+// ApplyNewPlatformDefaults fills the policy / probe / verdict / failover fields
+// that a freshly created platform starts with. The boot-time Default platform and
+// POST /platforms both go through here, so a new install and a newly created
+// platform agree: probing is always on, the advanced layer is on, and the verdict
+// ledger carries the threshold plus rehab settings it needs to act at all.
+func ApplyNewPlatformDefaults(mp *model.Platform) {
+	mp.AdvancedEnabled = true
+	mp.ProbeEnabled = true
+	mp.ProbeURL = DefaultProbeURL
+	mp.ProbeMethod = "GET"
+	mp.ProbePassStatus = []int{200, 204}
+	mp.ProbeIntervalNs = int64(30 * time.Minute)
+	mp.ProbeScope = "untested,failed,blacklisted"
+	mp.VerdictEnabled = true
+	mp.RehabEnabled = true
+	mp.BlacklistThreshold = 3
+	mp.RehabIntervalNs = int64(6 * time.Hour)
+	mp.RehabSuccessThreshold = 3
+	mp.FailoverEnabled = true
+	mp.FailoverMaxSwitches = 3
+	mp.FailoverDeadlineNs = int64(15 * time.Second)
+	mp.FailoverStage = "connect"
+}
+
+// NewPlatformModelDefaults returns a model.Platform carrying those defaults.
+func NewPlatformModelDefaults() model.Platform {
+	var mp model.Platform
+	ApplyNewPlatformDefaults(&mp)
+	return mp
+}
+

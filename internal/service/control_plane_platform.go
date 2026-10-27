@@ -193,6 +193,7 @@ func normalizePlatformEmptyAccountBehavior(raw string) string {
 }
 
 func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig {
+	defaults := platform.NewPlatformModelDefaults()
 	return platformConfig{
 		Name:                   name,
 		StickyTTLNs:            int64(s.EnvCfg.DefaultPlatformStickyTTL),
@@ -206,9 +207,13 @@ func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig 
 			s.EnvCfg.DefaultPlatformReverseProxyFixedAccountHeader,
 		),
 		AllocationPolicy: s.EnvCfg.DefaultPlatformAllocationPolicy,
-		Probe:            platform.ProbeFromModel(model.Platform{}),
-		Verdict:          platform.VerdictFromModel(model.Platform{}),
-		Failover:         platform.FailoverFromModel(model.Platform{}),
+		// A new platform starts policy-ready: probing on, advanced layer on, verdict
+		// threshold set, failover on. Seeded from the same helper as the built-in
+		// Default platform so the two cannot drift apart.
+		AdvancedEnabled: defaults.AdvancedEnabled,
+		Probe:           platform.ProbeFromModel(defaults),
+		Verdict:         platform.VerdictFromModel(defaults),
+		Failover:        platform.FailoverFromModel(defaults),
 	}
 }
 

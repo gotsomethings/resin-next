@@ -443,25 +443,7 @@ func ensureDefaultPlatform(
 		ReverseProxyFixedAccountHeader:   envCfg.DefaultPlatformReverseProxyFixedAccountHeader,
 		AllocationPolicy:                 envCfg.DefaultPlatformAllocationPolicy,
 
-		// A fresh install must not land with the whole advanced layer switched off:
-		// probing is always on in this fork, the master switch defaults to on, and the
-		// verdict ledger needs a threshold plus its rehab settings to do anything.
-		AdvancedEnabled:                  true,
-		ProbeEnabled:                     true,
-		ProbeURL:                         defaultPlatformProbeURL,
-		ProbeMethod:                      "GET",
-		ProbePassStatus:                  []int{200, 204},
-		ProbeIntervalNs:                  int64(30 * time.Minute),
-		ProbeScope:                       "untested,failed,blacklisted",
-		VerdictEnabled:                   true,
-		RehabEnabled:                     true,
-		BlacklistThreshold:               3,
-		RehabIntervalNs:                  int64(6 * time.Hour),
-		RehabSuccessThreshold:            3,
-		FailoverEnabled:                  true,
-		FailoverMaxSwitches:              3,
-		FailoverDeadlineNs:               int64(15 * time.Second),
-		FailoverStage:                    "connect",
+		// Same defaults as any newly created platform; see platform.ApplyNewPlatformDefaults.
 
 		UpdatedAtNs:                      time.Now().UnixNano(),
 	}

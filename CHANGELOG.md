@@ -9,6 +9,17 @@
 - 段落从 `## ` 开始，到下一个 `## ` 或文件结尾为止。
 - 推送 tag 前先在本地跑一遍抽取，确认非空且命中目标版本。
 
+## v1.0.2 — 2026-10-27
+
+### Fixed
+
+- **新建平台默认全是关的**：`defaultPlatformConfig` 用零值 `model.Platform` 构造
+  Probe / Verdict / Failover，且不设 `advanced_enabled`，所以 `POST /platforms` 建出来的平台
+  探测、判决、黑名单、换路全部不生效。实测新建平台 `advanced=false / probe=false / failover=false`，
+  换路因此永远不触发（同一场景 failover 关着时 502，打开后 200 并换到另一节点）。
+  现提取 `platform.ApplyNewPlatformDefaults` 作为唯一来源，bootstrap 的 Default 平台与创建接口
+  共用：探测恒开、总开关开、黑名单阈值 3、复用 6h / 成功 3 次解除、failover 开（3 次 / 15s / connect）。
+
 ## v1.0.1 — 2026-10-27
 
 ### Fixed
