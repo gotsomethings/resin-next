@@ -5,24 +5,35 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/Resinat/Resin/releases"><img src="https://img.shields.io/github/v/release/Resinat/Resin?style=flat-square&label=release&sort=semver" alt="Release" /></a>
-  <a href="https://github.com/Resinat/Resin/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Resinat/Resin/release.yml?style=flat-square&label=release%20pipeline" alt="Release Pipeline" /></a>
-  <a href="https://github.com/Resinat/Resin/pkgs/container/resin"><img src="https://img.shields.io/badge/ghcr-ghcr.io%2Fresinat%2Fresin-2496ED?style=flat-square&logo=docker&logoColor=white" alt="GHCR Image" /></a>
-  <a href="https://github.com/Resinat/Resin/blob/master/LICENSE"><img src="https://img.shields.io/github/license/Resinat/Resin?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/Resinat/Resin/blob/master/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/Resinat/Resin?style=flat-square" alt="Go Version" /></a>
-  <a href="https://github.com/Resinat/Resin/releases"><img src="https://img.shields.io/badge/support-linux%20%7C%20macOS%20%7C%20windows%20%C2%B7%20amd64%20%7C%20arm64-0A7EA4?style=flat-square" alt="Support Matrix" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/releases"><img src="https://img.shields.io/github/v/release/gotsomethings/resin-next?style=flat-square&label=release&sort=semver" alt="Release" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/gotsomethings/resin-next/release.yml?style=flat-square&label=release%20pipeline" alt="Release Pipeline" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/pkgs/container/resin-next"><img src="https://img.shields.io/badge/ghcr-ghcr.io%2Fgotsomethings%2Fresin--next-2496ED?style=flat-square&logo=docker&logoColor=white" alt="GHCR Image" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gotsomethings/resin-next?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/gotsomethings/resin-next?style=flat-square" alt="Go Version" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/releases"><img src="https://img.shields.io/badge/support-linux%20%7C%20macOS%20%7C%20windows%20%C2%B7%20amd64%20%7C%20arm64-0A7EA4?style=flat-square" alt="Support Matrix" /></a>
   <a href="DESIGN.md"><img src="https://img.shields.io/badge/docs-DESIGN.md-1F6FEB?style=flat-square" alt="Design Docs" /></a>
 </p>
 
 ---
 
-**Resin-next** 是一个专为接管海量节点设计的**高性能智能代理池网关**。
+**Resin-next** 是一个专为接管海量节点设计的**高性能智能代理池网关**，也是**平台策略（Platform Policy）**能力持续开发并实际投入生产的分支。
 
-> Resin-next 是基于 [Resin](https://github.com/Resinat/Resin) 的定制分支。
+> Resin-next 是基于 [Resin](https://github.com/Resinat/Resin) 的定制分支。上游能力整体继承，本分支在其上增加了一层有自己主张的策略层，并为真实部署而维护。
 
 它用于在上层屏蔽底层代理节点的不稳定性，将分散节点聚合为一个支持 **“会话保持（粘性路由）”** 的统一代理入口。
 
-## 💡 为什么选择 Resin-next？
+## 🍴 这个分支多了什么
+
+以下能力已在本分支实现并随本仓库的 Release 发布：
+
+- **平台策略，一套口径** —— 平台由基础配置（订阅启用 + 标签规则 + 区域 + 已探测出口 IP）定义，高级维度（策略筛选、探测判决、黑名单）为可选增强。总开关 `advanced_enabled` 关闭后，平台只按基础配置过滤。
+- **探测恒开** —— 去掉「应用探测」开关，同时删除三项死配置（跟随重定向、探测间隔全局化、探测范围全量）。保留的是单次探测硬超时（2 倍超时配置）与每轮摘要日志。
+- **可配置的通过率窗口** —— “近 N 分钟通过率”支持任意 N（最小 10），用样本环存储而非固定 24 小时分桶，所以 10 分钟和 24 小时一样可用。
+- **有界的判决台账** —— 每个 IP 的判决（失败次数、通过率、手动拉黑、复用）持久化并定期清理：IP 离开节点池超过 5 分钟后删除对应行。
+- **可操作的 IP 列表** —— 展示真正通过平台规则的 IP，按 **IP 计数**（可用 / 探测失败 / 已拉黑 / 待测），可按加入时间、失败次数、探测时间排序。黑名单状态不参与列表筛选，所以随时能在界面上解除拉黑。
+- **不会被自动洗白的手动拉黑** —— 手动拉黑不会被动恢复；只有再次关掉开关才会释放该 IP 并踢掉它的租约。
+
+## 💡 为什么选择 Resin-next？（继承自 Resin）
 
 - **海量接管**：轻松管理十万级规模的代理节点。高性能，原生支持高并发。
 - **智能调度与熔断**：全自动的 **被动+主动** 健康探测、出口 IP 探测、延迟分析，精准剔除坏节点。采用 P2C 算法结合按域名的延迟加权评分，智能选择最优节点。

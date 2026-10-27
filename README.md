@@ -7,24 +7,35 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/Resinat/Resin/releases"><img src="https://img.shields.io/github/v/release/Resinat/Resin?style=flat-square&label=release&sort=semver" alt="Release" /></a>
-  <a href="https://github.com/Resinat/Resin/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/Resinat/Resin/release.yml?style=flat-square&label=release%20pipeline" alt="Release Pipeline" /></a>
-  <a href="https://github.com/Resinat/Resin/pkgs/container/resin"><img src="https://img.shields.io/badge/ghcr-ghcr.io%2Fresinat%2Fresin-2496ED?style=flat-square&logo=docker&logoColor=white" alt="GHCR Image" /></a>
-  <a href="https://github.com/Resinat/Resin/blob/master/LICENSE"><img src="https://img.shields.io/github/license/Resinat/Resin?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/Resinat/Resin/blob/master/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/Resinat/Resin?style=flat-square" alt="Go Version" /></a>
-  <a href="https://github.com/Resinat/Resin/releases"><img src="https://img.shields.io/badge/support-linux%20%7C%20macOS%20%7C%20windows%20%C2%B7%20amd64%20%7C%20arm64-0A7EA4?style=flat-square" alt="Support Matrix" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/releases"><img src="https://img.shields.io/github/v/release/gotsomethings/resin-next?style=flat-square&label=release&sort=semver" alt="Release" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/gotsomethings/resin-next/release.yml?style=flat-square&label=release%20pipeline" alt="Release Pipeline" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/pkgs/container/resin-next"><img src="https://img.shields.io/badge/ghcr-ghcr.io%2Fgotsomethings%2Fresin--next-2496ED?style=flat-square&logo=docker&logoColor=white" alt="GHCR Image" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gotsomethings/resin-next?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/gotsomethings/resin-next?style=flat-square" alt="Go Version" /></a>
+  <a href="https://github.com/gotsomethings/resin-next/releases"><img src="https://img.shields.io/badge/support-linux%20%7C%20macOS%20%7C%20windows%20%C2%B7%20amd64%20%7C%20arm64-0A7EA4?style=flat-square" alt="Support Matrix" /></a>
   <a href="DESIGN.md"><img src="https://img.shields.io/badge/docs-DESIGN.md-1F6FEB?style=flat-square" alt="Design Docs" /></a>
 </p>
 
 ---
 
-**Resin-next** is a **high-performance intelligent proxy pool gateway** built for operating massive numbers of proxy nodes.
+**Resin-next** is a **high-performance intelligent proxy pool gateway** built for operating massive numbers of proxy nodes — and the branch where the **platform policy** layer is actively developed and used in production.
 
-> Resin-next is a customized fork of [Resin](https://github.com/Resinat/Resin).
+> Resin-next is a customized fork of [Resin](https://github.com/Resinat/Resin). Upstream capabilities are inherited wholesale; this branch adds an opinionated policy layer on top, and is maintained for real deployments.
 
 It helps shield your services from unstable underlying proxy nodes by aggregating distributed proxy resources into a unified proxy entrypoint with **session stickiness (sticky routing)**.
 
-## 💡 Why Resin-next?
+## 🍴 What this fork adds
+
+Everything below is already in this branch and shipped in the releases here:
+
+- **Platform policy, one consistent model** — a platform is defined by base config (enabled subscription + tag rules + region + probed egress IP) plus optional advanced dimensions (policy filters, probe verdicts, blacklist). One master switch (`advanced_enabled`) turns the whole policy layer off and lets the platform fall back to base filtering only.
+- **Probe is always on** — the old “apply probe” toggle is gone, together with three dead settings (follow redirects, global probe interval, full-pool scope). What remains is a hard per-probe timeout (2× the configured timeout) and a per-round summary log.
+- **Configurable pass-rate window** — “pass rate over the last N minutes” with N ≥ 10, backed by a sample ring instead of fixed 24-hour buckets, so 10 minutes is as meaningful as 24 hours.
+- **Verdict ledger with bounded memory** — per-IP verdicts (failure count, pass rate, manual blacklist, rehab) are persisted and pruned: entries for IPs that left the pool are dropped after a 5-minute grace period.
+- **IP list you can act on** — shows the IPs that actually survive the platform rules, counted **per IP** (available / failing / blacklisted / untested), sortable by join time, failure count or probe time. Blacklist state does not filter the list, so you can always un-blacklist an IP from the UI.
+- **Manual blacklist that stays put** — a manual blacklist survives automatic rehab; only toggling it off releases the IP and drops its lease.
+
+## 💡 Why Resin-next? (inherited from Resin)
 
 - **Massive-scale management**: Easily handles 100k+ proxy nodes with native high-concurrency performance.
 - **Smart scheduling and circuit breaking**: Fully automated **passive + active** health checks, outbound IP probing, and latency analysis to remove bad nodes precisely. Uses P2C plus domain-aware latency-weighted scoring for optimal node selection.

@@ -1,22 +1,29 @@
 name: Release
 
+# 推 v* tag 自动触发：6 平台二进制 + GHCR 镜像 + Release（正文取自 CHANGELOG.md）
 on:
   push:
     tags:
-      - 'v*' # Trigger on tags starting with v, e.g., v1.0.0, v1.0.0-rc.1
+      - 'v*'
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  BUILD_TAGS: with_quic with_wireguard with_grpc with_utls with_embedded_tor with_naive_outbound
+
 jobs:
   build-binaries:
-    name: Build Binaries
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
+        # 6 个平台：linux/darwin/windows × amd64/arm64
         include:
           - goos: linux
             goarch: amd64
@@ -28,14 +35,19 @@ jobs:
             goarch: arm64
           - goos: windows
             goarch: amd64
+          - goos: windows
+            goarch: arm64
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # webui/dist 不入库，而 Go 通过 go:embed 依赖它，所以先构建前端
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
 
       - name: Build WebUI
         working-directory: ./webui
@@ -46,7 +58,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version-file: go.mod
+          cache: true
 
       - name: Build Go Binary
         env:
@@ -57,31 +70,31 @@ jobs:
           VERSION=${GITHUB_REF_NAME}
           GIT_COMMIT=${GITHUB_SHA::8}
           BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          
+
           OUTPUT_NAME=resin-${GOOS}-${GOARCH}
           if [ "$GOOS" = "windows" ]; then
             OUTPUT_NAME="${OUTPUT_NAME}.exe"
           fi
           echo "OUTPUT_NAME=${OUTPUT_NAME}" >> $GITHUB_ENV
-          
+
           mkdir -p build
-          
-          go build -trimpath -tags "with_quic with_wireguard with_grpc with_utls with_embedded_tor with_naive_outbound" \
+
+          go build -trimpath -tags "${BUILD_TAGS}" \
             -ldflags="-s -w \
             -X github.com/Resinat/Resin/internal/buildinfo.Version=${VERSION} \
             -X github.com/Resinat/Resin/internal/buildinfo.GitCommit=${GIT_COMMIT} \
             -X github.com/Resinat/Resin/internal/buildinfo.BuildTime=${BUILD_TIME}" \
             -o build/${OUTPUT_NAME} ./cmd/resin
-            
+
           cd build
-          
-          # Create a copy with the simple name for the archive
+
+          # 归档内使用简单文件名
           SIMPLE_NAME="resin"
           if [ "$GOOS" = "windows" ]; then
             SIMPLE_NAME="resin.exe"
           fi
           cp ${OUTPUT_NAME} ${SIMPLE_NAME}
-          
+
           if [ "$GOOS" = "windows" ]; then
             zip resin-${GOOS}-${GOARCH}.zip ${SIMPLE_NAME}
             PACKAGE_NAME="resin-${GOOS}-${GOARCH}.zip"
@@ -89,8 +102,7 @@ jobs:
             tar -czvf resin-${GOOS}-${GOARCH}.tar.gz ${SIMPLE_NAME}
             PACKAGE_NAME="resin-${GOOS}-${GOARCH}.tar.gz"
           fi
-          
-          # Remove simple name copy to avoid confusion
+
           rm ${SIMPLE_NAME}
           echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
 
@@ -119,14 +131,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Find Release Note
-        id: release_note
-        env:
-          RELEASE_NOTE_PATH: doc/release-notes/${{ github.ref_name }}.md
+      # 正文只来自 CHANGELOG.md 对应 tag 的段落；不能抽到就报错，绝不发空正文
+      - name: Extract release notes from CHANGELOG.md
         run: |
-          if [[ -f "$RELEASE_NOTE_PATH" ]]; then
-            echo "path=$RELEASE_NOTE_PATH" >> "$GITHUB_OUTPUT"
-          fi
+          python3 - "${GITHUB_REF_NAME}" <<'PY'
+          import pathlib, re, sys
+
+          tag = sys.argv[1]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          m = re.search(r"(?ms)^##\s+" + re.escape(tag) + r"\b.*?(?=^##\s|\Z)", text)
+          if not m:
+              sys.exit(f"no CHANGELOG section for {tag}")
+          body = m.group(0).strip()
+          pathlib.Path("RELEASE_NOTES.md").write_text(body + "\n", encoding="utf-8")
+          print(body)
+          PY
 
       - name: Download Release Package Artifacts
         uses: actions/download-artifact@v4
@@ -150,8 +169,8 @@ jobs:
           files: build/*
           fail_on_unmatched_files: true
           overwrite_files: true
-          body_path: ${{ steps.release_note.outputs.path }}
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
           prerelease: ${{ steps.check_prerelease.outputs.is_prerelease == 'true' }}
 
   docker:
@@ -161,7 +180,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
