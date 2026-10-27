@@ -111,6 +111,7 @@ var platformPatchAllowedFields = map[string]bool{
 	"reverse_proxy_fixed_account_header":   true,
 	"allocation_policy":                    true,
 	"passive_circuit_breaker_disabled":     true,
+	"advanced_enabled":                     true,
 
 	// Policy surface (P1).
 	"latency_top_n":          true,

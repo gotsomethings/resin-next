@@ -9,6 +9,19 @@
 - 段落从 `## ` 开始，到下一个 `## ` 或文件结尾为止。
 - 推送 tag 前先在本地跑一遍抽取，确认非空且命中目标版本。
 
+## v1.0.1 — 2026-10-27
+
+### Fixed
+
+- **全新安装的高级层全是关的**：`ensureDefaultPlatform` 用裸结构体创建 Default 平台，
+  `advanced_enabled` / `probe_enabled` / `verdict_enabled` / `rehab_enabled` 全为 false、
+  `probe_url` 为空、阈值与间隔全为 0，结果是**平台探测从不运行**（日志里连一轮 `platform probe …`
+  都没有）。现在 bootstrap 按运行时默认值播种：探测恒开（GET `https://www.gstatic.com/generate_204`，
+  通过码 200/204，间隔 30m）、总开关开、黑名单阈值 3、复用 6h / 成功 3 次解除、failover 开。
+- **总开关根本无法修改**：`advanced_enabled` 不在 `platformPatchAllowedFields` 里，
+  `PATCH /platforms/{id}` 直接返回 400 `field "advanced_enabled" is read-only or unknown`，
+  面板上的开关点下去一定失败。已补进允许字段表。
+
 ## v1.0.0 — 2026-10-27
 
 ### 中文摘要
