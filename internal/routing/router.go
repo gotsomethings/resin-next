@@ -297,14 +297,8 @@ func (r *Router) tryLeaseSameIPRotation(
 	newLease := current
 	newLease.NodeHash = bestHash
 	newLease.LastAccessedNs = nowNs
-	// Rebuilding on the same egress IP is still a new lease: renew the expiry so the
-	// account gets a full sticky TTL on the replacement node instead of inheriting
-	// the remainder of the previous lease.
-	ttl := plat.StickyTTLNs
-	if ttl <= 0 {
-		ttl = int64(24 * time.Hour)
-	}
-	newLease.ExpiryNs = time.Unix(0, nowNs).Add(time.Duration(ttl)).UnixNano()
+	// 同 IP 轮换只换背后的物理节点，出口 IP 不变，租约过期时间保持原值；
+	// 只有轮换落空、真正重建租约（createLease 路径）才重新计算过期时间。
 	r.emitLeaseEvent(LeaseEvent{
 		Type:       LeaseReplace,
 		PlatformID: plat.ID,
