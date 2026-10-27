@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # webui/dist 不在版本库里（webui/.gitignore），而 Go 通过 go:embed 把它打进去，
+      # 所以必须先构建前端，再编译 Go。
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+
+      - name: Build WebUI
+        working-directory: ./webui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go build
+        run: go build ./...
+
+      - name: Go vet (non-blocking)
+        continue-on-error: true
+        run: go vet ./...
+
+      - name: Go test
+        run: go test ./... -count=1
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: '**/*.log'
+          if-no-files-found: ignore
+          retention-days: 7
